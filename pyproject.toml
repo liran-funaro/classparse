@@ -69,7 +69,7 @@ push = false
     "Copyright (c) 2023-YYYY, Liran Funaro.",
 ]
 "README.md" = [
-    "classparse=={version}",
+    "classparse@{version}",
     "Copyright (c) 2023-YYYY, Liran Funaro.",
 ]
 "LICENSE" = [
@@ -77,9 +77,6 @@ push = false
 ]
 "*.py" = [
     "Copyright (c) 2023-YYYY, Liran Funaro.",
-]
-"setup.py" = [
-    "version=\"{version}\"",
 ]
 "classparse.py" = [
     "^__version__ = \"{version}\"$",
