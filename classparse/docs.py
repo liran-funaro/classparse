@@ -27,18 +27,63 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 """
-from types import ModuleType
-
-mod = ModuleType("my_module")
-mod_code = """
 import dataclasses
-import classparse
+import inspect
+import io
+import tokenize
+import typing
 
-@classparse.as_parser(prog="no_source")
-@dataclasses.dataclass(frozen=True)
-class NoSourceTestClass:
-    "Doc"
-    one_arg: str
-"""
-exec(mod_code, mod.__dict__)
-NoSourceTestClass = mod.NoSourceTestClass
+
+def _tokenize_fields(
+    container_class: dataclasses.dataclass,
+) -> typing.List[typing.List[tokenize.TokenInfo]]:
+    lines = [[]]
+    # noinspection PyBroadException
+    try:
+        source = inspect.getsource(container_class)
+        with io.StringIO(source) as f:
+            for t in tokenize.generate_tokens(f.readline):
+                if t.type == tokenize.NEWLINE:
+                    lines.append([])
+                else:
+                    lines[-1].append(t)
+    except Exception:
+        pass
+
+    return list(filter(lambda x: len(x) > 0, lines))
+
+
+def _iter_valid_tok(line):
+    for t in line:
+        if t.type not in [tokenize.COMMENT, tokenize.NL, tokenize.INDENT]:
+            yield t
+
+
+def _iter_comment_tok(line):
+    for t in line:
+        if t.type != tokenize.COMMENT:
+            continue
+        c = t.string
+        if c.startswith("#"):
+            c = c[1:]
+        yield c.strip()
+
+
+def get_argument_docs(container_class: dataclasses.dataclass) -> typing.Dict[str, str]:
+    lines = _tokenize_fields(container_class)
+
+    docs = {}
+    for line in lines:
+        iter_tok = _iter_valid_tok(line)
+        try:
+            name_tok, op_tok = next(iter_tok), next(iter_tok)
+        except StopIteration:
+            continue
+        if name_tok.type != tokenize.NAME or op_tok.type != tokenize.OP or op_tok.string != ":":
+            continue
+
+        comment = "\n".join(_iter_comment_tok(line))
+        if comment:
+            docs[name_tok.string] = comment
+
+    return docs

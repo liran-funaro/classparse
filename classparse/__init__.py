@@ -32,17 +32,32 @@ POSSIBILITY OF SUCH DAMAGE.
 import argparse
 import dataclasses
 import enum
-import inspect
-import itertools
-import tokenize
+import functools
 import typing
-import io
+from dataclasses import dataclass
+from types import MethodType
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+)
+
+import yaml
+
+from classparse import docs
+from classparse.types import _update_field_type
 
 __version__ = "0.1.0"
 
-NO_ARG = '__no_arg__'
-POS_ARG = '__pos_arg__'
-__TYPE_RECURSION_LIMIT = 1024
+NO_ARG = "__no_arg__"
+POS_ARG = "__pos_arg__"
 
 
 def arg(flag=None, default=None, **metadata):
@@ -64,266 +79,288 @@ def pos_arg(default=dataclasses.MISSING, **metadata):
 
 
 def no_arg(default=None, **kwargs):
-    """ Set dataclass field as non argparse argument """
-    metadata = kwargs.setdefault('metadata', {})
+    """Set dataclass field as non argparse argument"""
+    metadata = kwargs.setdefault("metadata", {})
     metadata[NO_ARG] = True
     return dataclasses.field(default=default, **kwargs)
 
 
-def _name_or_flags_arg(arg_name: str, flag: typing.Optional[str] = None,
-                       positional: bool = False) -> typing.Iterable[str]:
-    arg_name = arg_name.replace('_', '-')
+def to_arg_name(name: str) -> str:
+    """Convert a valid variable name to an argument name"""
+    return name.replace("_", "-")
+
+
+def to_var_name(name: str) -> str:
+    """Convert a valid argument name to an variable name"""
+    return name.replace("-", "_")
+
+
+def _name_or_flags_arg(arg_name: str, flag: Optional[str] = None, positional: bool = False) -> Iterable[str]:
+    arg_name = to_arg_name(arg_name)
     if positional:
         assert flag is None, "Flag is not supported for positional argument"
         return [arg_name]
     return filter(None, [flag, f"--{arg_name}"])
 
 
-def _is_missing_default(default_value) -> bool:
-    return default_value is dataclasses.MISSING
+def _obj_to_yaml_dict(o):
+    if isinstance(o, dict):
+        return {k: _obj_to_yaml_dict(v) for k, v in o.items()}
+    if isinstance(o, (tuple, list)):
+        return [_obj_to_yaml_dict(v) for v in o]
+    if isinstance(o, enum.Enum):
+        return o.name
+    return o
 
 
-def __wrap_enum(enum_type):
-    # noinspection PyBroadException
-    def __enum_wrapper__(x):
-        try:
-            return enum_type(int(x))
-        except Exception:
-            pass
+def _yaml_dict_to_obj(o, value_type: Union[Callable, Dict[str, Callable]]):
+    if isinstance(o, dict):
+        return {k: _yaml_dict_to_obj(v, value_type.get(k, None)) for k, v in o.items()}
+    if isinstance(o, (tuple, list)):
+        return [_yaml_dict_to_obj(v, value_type) for v in o]
 
-        try:
-            return enum_type(x)
-        except Exception:
-            return enum_type[x]
-
-    __enum_wrapper__.__name__ = enum_type.__name__
-    return __enum_wrapper__
-
-
-def __wrap_union(union: typing.Union, arg_set: typing.List[type]):
-    name = repr(union)
-
-    # noinspection PyBroadException
-    def __union_wrapper__(x):
-        e_list = []
-        for arg_type in arg_set:
-            try:
-                return arg_type(x)
-            except Exception as e:
-                e_list.append(f'{arg_type}: {e}')
-
-        raise TypeError(f"Could not apply any of the types in {name}: {', '.join(e_list)}.")
-
-    __union_wrapper__.__name__ = name
-    return __union_wrapper__
-
-
-def _update_field_type(argument_args: dict) -> bool:
-    """ Return `True` if the type was reassigned, and it requires to inspect it again """
-    cur_type = argument_args.get('type', None)
-    cur_origin = typing.get_origin(cur_type)
-    cur_args: tuple = typing.get_args(cur_type)
-
-    if cur_type is typing.Optional:
-        # Optional annotation without a type
-        del argument_args['type']
-        return False
-
-    if cur_origin is typing.Union:
-        # Optional annotation with a type (interpreted as a Union), Union
-        arg_set = [v for v in cur_args if not issubclass(v, type(None)) and v is not None]
-        if len(arg_set) == 1:
-            # For union of one type (other than None), we support further inspection of the type
-            argument_args['type'] = cur_args[0]
-            return True
-        else:
-            argument_args['type'] = __wrap_union(cur_type, arg_set)
-            return False
-
-    if cur_type in (list, tuple) or cur_origin is list:
-        # List/Tuple type/annotation is used to define a repeated argument
-        argument_args.setdefault('nargs', '+')
-        if len(cur_args) > 0:
-            arg_set = list(set(cur_args))
-            assert len(arg_set) == 1, "All args must be of the same type"
-            argument_args['type'] = cur_args[0]
-            return True
-        else:
-            del argument_args['type']
-            return False
-
-    if cur_origin is tuple:
-        # Tuple annotation is used to define a fixed length repeated argument
-        argument_args.setdefault('nargs', len(cur_args))
-        arg_set = list(set(cur_args))
-        assert len(arg_set) == 1, "All args must be of the same type"
-        argument_args['type'] = cur_args[0]
-        return True
-
-    if isinstance(cur_type, type) and issubclass(cur_type, enum.Enum):
-        # Enum type is used to define a typed choice argument
-        choices = list(cur_type)
-        argument_args['choices'] = choices
-        argument_args['metavar'] = '{%s}' % ",".join([f'{c.name}/{c.value}' for c in choices])
-        cur_default = argument_args.get('default', None)
-        if isinstance(cur_default, enum.Enum):
-            argument_args['default'] = cur_default.name
-        argument_args['type'] = __wrap_enum(cur_type)
-        return False
-
-    if cur_origin is typing.Literal:
-        # Literal type is used to define an untyped choice argument
-        argument_args['choices'] = list(cur_args)
-        cur_types = list({type(a) for a in cur_args})
-        assert len(cur_types) == 1, "All literals must be of the same type"
-        argument_args['type'] = cur_types[0]
-        return True
-
-    if isinstance(cur_type, type) and issubclass(cur_type, bool):
-        # bool type is used to define a store_true argument
-        if hasattr(argparse, 'BooleanOptionalAction'):
-            argument_args['action'] = argparse.BooleanOptionalAction
-        else:
-            argument_args['action'] = 'store_true'
-            del argument_args['type']
-        return False
-
-    return False
-
-
-def _add_argument_from_field(parser: argparse.ArgumentParser, field: dataclasses.Field, docs: typing.Dict[str, str],
-                             **default_argument_args):
-    # Override default arguments by explicit field arguments
-    argument_args = dict(default_argument_args)
-    argument_args.update(field.metadata)
-    flag = argument_args.pop('flag', None)
-    is_no_arg = argument_args.pop(NO_ARG, False)
-    is_positional = argument_args.pop(POS_ARG, False)
-    if is_no_arg:
-        return
-
-    # Override type unless set explicitly
-    if 'type' not in field.metadata:
-        argument_args['type'] = field.type
-
-    # Override help unless set explicitly
-    field_doc = docs.get(field.name, None)
-    if 'help' not in field.metadata and field_doc is not None:
-        argument_args['help'] = field_doc
-
-    # Override default unless set explicitly
-    no_default = _is_missing_default(field.default)
-    if 'default' not in field.metadata and not no_default:
-        argument_args['default'] = field.default
-
-    # Some types are recursive, so we iterate until no special type is matched
-    iter_count = itertools.count()
-    while _update_field_type(argument_args) and next(iter_count) < __TYPE_RECURSION_LIMIT:
-        pass
-
-    is_positional |= no_default
-    parser.add_argument(*_name_or_flags_arg(field.name, flag, is_positional), **argument_args)
-
-
-def _tokenize_fields(container_class: dataclasses.dataclass) -> typing.List[typing.List[tokenize.TokenInfo]]:
-    lines = [[]]
-    # noinspection PyBroadException
-    try:
-        source = inspect.getsource(container_class)
-        with io.StringIO(source) as f:
-            for t in tokenize.generate_tokens(f.readline):
-                if t.type == tokenize.NEWLINE:
-                    lines.append([])
-                else:
-                    lines[-1].append(t)
-    except Exception:
-        pass
-
-    return list(filter(lambda x: len(x) > 0, lines))
-
-
-def _iter_valid_tok(line):
-    for t in line:
-        if t.type not in [tokenize.COMMENT, tokenize.NL, tokenize.INDENT]:
-            yield t
-
-
-def _iter_comment_tok(line):
-    for t in line:
-        if t.type != tokenize.COMMENT:
-            continue
-        c = t.string
-        if c.startswith("#"):
-            c = c[1:]
-        yield c.strip()
-
-
-def _get_argument_docs(container_class: dataclasses.dataclass) -> typing.Dict[str, str]:
-    lines = _tokenize_fields(container_class)
-
-    docs = {}
-    for line in lines:
-        iter_tok = _iter_valid_tok(line)
-        try:
-            name_tok, op_tok = next(iter_tok), next(iter_tok)
-        except StopIteration:
-            continue
-        if name_tok.type != tokenize.NAME or op_tok.type != tokenize.OP or op_tok.string != ":":
-            continue
-
-        comment = "\n".join(_iter_comment_tok(line))
-        if comment:
-            docs[name_tok.string] = comment
-
-    return docs
-
-
-def make_parser(container_class: dataclasses.dataclass, default_argument_args=None,
-                **parser_args) -> argparse.ArgumentParser:
-    """ Create parser from a dataclass """
-    if not dataclasses.is_dataclass(container_class):
-        raise TypeError("Cannot operate on a non-dataclass object.")
-
-    docs = _get_argument_docs(container_class)
-
-    parser_args.setdefault('description', container_class.__doc__)
-    parser = argparse.ArgumentParser(**parser_args)
-
-    if default_argument_args is None:
-        default_argument_args = {}
-
-    for field in dataclasses.fields(container_class):
-        _add_argument_from_field(parser, field, docs, **default_argument_args)
-
-    return parser
-
-
-def parse_args_to_class(container_class: dataclasses.dataclass,
-                        parser: argparse.ArgumentParser, args=None) -> dataclasses.dataclass:
-    arg_namespace = parser.parse_args(args=args)
-    return container_class(**{k.replace("-", "_"): v for k, v in vars(arg_namespace).items()})
-
-
-def parse_to(container_class: dataclasses.dataclass, args=None,
-             default_argument_args: dict = None, **parser_args) -> dataclasses.dataclass:
-    """ Parse arguments to a dataclass """
-    parser = make_parser(container_class, default_argument_args=default_argument_args, **parser_args)
-    return parse_args_to_class(container_class, parser, args=args)
-
-
-def as_parser(cls=None, /, **defined_kwargs):
-    """ Decorator that adds `parse_args()` method to dataclass, that parse arguments into this dataclass """
-
-    def decorator(container_class) -> typing.Union[argparse.ArgumentParser, dataclasses.dataclass]:
-        parser = make_parser(container_class, **defined_kwargs)
-
-        def parse_args(args=None) -> container_class:
-            return parse_args_to_class(container_class, parser, args=args)
-
-        setattr(container_class, 'parse_args', parse_args)
-        return container_class
-
-    if cls is not None:
-        return decorator(cls)
+    if callable(value_type) and isinstance(o, str):
+        return value_type(o)
     else:
+        return o
+
+
+class DataclassParser(typing.Protocol):  # pragma: no cover
+    @classmethod
+    def get_vars(cls) -> Dict[str, Any]:
+        ...
+
+    @classmethod
+    def asdict(cls) -> Dict[str, Any]:
+        ...
+
+    @classmethod
+    def dump_yaml(cls, stream=None, **kwargs) -> str:
+        ...
+
+    @classmethod
+    def load_yaml(cls, stream) -> "DataclassParser":
+        ...
+
+    @classmethod
+    def get_parser(cls) -> argparse.ArgumentParser:
+        ...
+
+    @classmethod
+    def format_help(cls) -> str:
+        ...
+
+    @classmethod
+    def format_usage(cls) -> str:
+        ...
+
+    @classmethod
+    def print_help(cls, file=None):
+        ...
+
+    @classmethod
+    def print_usage(cls, file=None):
+        ...
+
+    @classmethod
+    def parse_args(cls, args: Optional[Sequence[str]] = None) -> "DataclassParser":
+        ...
+
+    @classmethod
+    def parse_intermixed_args(cls, args: Optional[Sequence[str]] = None) -> "DataclassParser":
+        ...
+
+    @classmethod
+    def parse_known_args(cls, args: Optional[Sequence[str]] = None) -> Tuple["DataclassParser", List[str]]:
+        ...
+
+    @classmethod
+    def parse_known_intermixed_args(cls, args: Optional[Sequence[str]] = None) -> Tuple["DataclassParser", List[str]]:
+        ...
+
+
+class DataclassParserMaker:
+    def __init__(self, cls: dataclass, default_argument_args=None, **parser_args):
+        if not dataclasses.is_dataclass(cls):
+            raise TypeError("Cannot operate on a non-dataclass object.")
+
+        if not isinstance(cls, type):
+            cls = type(cls)
+
+        self.cls = cls
+
+        if default_argument_args is None:
+            default_argument_args = {}
+        self.default_argument_args = default_argument_args
+
+        parser_args.setdefault("description", cls.__doc__)
+        self.parser_args = parser_args
+
+        self.docs = docs.get_argument_docs(cls)
+        self.args = []
+
+        for field in dataclasses.fields(cls):
+            self.add_argument_from_field(field)
+
+        self.all_types = {name: kwargs.get("type", None) for name, _, kwargs in self.args}
+        self.all_defaults = {name: kwargs.get("default", None) for name, _, kwargs in self.args}
+        self.main_parser = self.make()
+
+    def add_argument_from_field(self, field: dataclasses.Field):
+        # Arguments precedence: field.metadata, default_argument_args
+        kwargs = dict(self.default_argument_args)
+        kwargs.update(field.metadata)
+        is_no_arg = kwargs.pop(NO_ARG, False)
+        if is_no_arg:
+            return
+
+        flag = kwargs.pop("flag", None)
+        has_default = field.default is not dataclasses.MISSING
+        is_positional = kwargs.pop(POS_ARG, False) or not has_default
+        args = list(_name_or_flags_arg(field.name, flag, is_positional))
+
+        # Type precedence: field.metadata, field.type, default_argument_args
+        if "type" not in field.metadata:
+            kwargs["type"] = field.type
+
+        # Help precedence: field.metadata, field_doc, default_argument_args
+        field_doc = self.docs.get(field.name, None)
+        if "help" not in field.metadata and field_doc is not None:
+            kwargs["help"] = field_doc
+
+        # Default precedence: override_default, field.default, field.metadata, default_argument_args
+        if has_default:
+            kwargs["default"] = field.default
+
+        # Fix field type to match work well with argparse
+        _update_field_type(kwargs)
+
+        self.args.append((field.name, args, kwargs))
+
+    def make(self, default_values: Union[dataclass, Dict[str, Any], None] = None):
+        parser = argparse.ArgumentParser(**self.parser_args)
+        if dataclasses.is_dataclass(default_values):
+            default_values = dataclasses.asdict(default_values)
+        if isinstance(default_values, dict):
+            default_values = {to_var_name(k): v for k, v in default_values.items()}
+        if default_values is None:
+            default_values = {}
+
+        for name, args, kwargs in self.args:
+            if name in default_values:
+                kwargs = dict(kwargs, default=default_values[name])
+            parser.add_argument(*args, **kwargs)
+
+        return parser
+
+    def cast_to_class(self, namespace) -> dataclass:
+        return self.cls(**{to_var_name(k): v for k, v in vars(namespace).items()})
+
+    def get_vars(self, instance_or_cls) -> Dict[str, Any]:
+        if isinstance(instance_or_cls, type):
+            return dict(self.all_defaults)
+        else:
+            return dataclasses.asdict(instance_or_cls)
+
+    def asdict(self, instance_or_cls) -> Dict[str, Any]:
+        return {to_arg_name(k): v for k, v in self.get_vars(instance_or_cls).items()}
+
+    def dump_yaml(self, instance_or_cls, stream=None, **kwargs) -> str:
+        cur_vars = self.get_vars(instance_or_cls)
+        cur_vars = _obj_to_yaml_dict(cur_vars)
+        return yaml.safe_dump(cur_vars, stream=stream, **kwargs)
+
+    def load_yaml(self, instance_or_cls, stream) -> DataclassParser:
+        cur_vars = self.get_vars(instance_or_cls)
+        loaded_vars = yaml.safe_load(stream)
+        loaded_vars = _yaml_dict_to_obj(loaded_vars, self.all_types)
+        cur_vars.update(loaded_vars)
+        return self.cls(**cur_vars)
+
+    def _get_parser(self, instance_or_cls) -> argparse.ArgumentParser:
+        if isinstance(instance_or_cls, type):
+            return self.main_parser
+        else:
+            return self.make(instance_or_cls)
+
+    def get_parser(self, instance_or_cls) -> argparse.ArgumentParser:
+        return self.make(instance_or_cls if not isinstance(instance_or_cls, type) else None)
+
+    def format_help(self, instance_or_cls) -> str:
+        return self._get_parser(instance_or_cls).format_help()
+
+    def format_usage(self, instance_or_cls) -> str:
+        return self._get_parser(instance_or_cls).format_usage()
+
+    def print_help(self, instance_or_cls, file=None):
+        return self._get_parser(instance_or_cls).print_help(file)
+
+    def print_usage(self, instance_or_cls, file=None):
+        return self._get_parser(instance_or_cls).print_usage(file)
+
+    def parse_args(self, instance_or_cls, args: Optional[Sequence[str]] = None) -> DataclassParser:
+        namespace = self._get_parser(instance_or_cls).parse_args(args=args)
+        return self.cast_to_class(namespace)
+
+    def parse_intermixed_args(self, instance_or_cls, args: Optional[Sequence[str]] = None) -> DataclassParser:
+        namespace = self._get_parser(instance_or_cls).parse_intermixed_args(args=args)
+        return self.cast_to_class(namespace)
+
+    def parse_known_args(
+        self, instance_or_cls, args: Optional[Sequence[str]] = None
+    ) -> Tuple[DataclassParser, List[str]]:
+        namespace, args = self._get_parser(instance_or_cls).parse_known_args(args=args)
+        return self.cast_to_class(namespace), args
+
+    def parse_known_intermixed_args(
+        self, instance_or_cls, args: Optional[Sequence[str]] = None
+    ) -> Tuple[DataclassParser, List[str]]:
+        namespace, args = self._get_parser(instance_or_cls).parse_known_intermixed_args(args=args)
+        return self.cast_to_class(namespace), args
+
+
+def make_parser(cls: dataclass, default_argument_args=None, **parser_args) -> argparse.ArgumentParser:
+    return DataclassParserMaker(cls, default_argument_args, **parser_args).main_parser
+
+
+def parse_to(cls: dataclass, args=None, default_argument_args: dict = None, **parser_args) -> dataclass:
+    """Parse arguments to a dataclass"""
+    parser_maker = DataclassParserMaker(cls, default_argument_args=default_argument_args, **parser_args)
+    return parser_maker.parse_args(cls, args=args)
+
+
+class ClassOrInstanceMethod:
+    def __init__(self, f):
+        self.f = f
+        functools.update_wrapper(self, f)
+
+    def __get__(self, obj, cls=None):
+        if obj is not None:
+            val = obj
+        else:
+            val = cls
+        return MethodType(self.f, val)
+
+
+_dataclass_parser_methods: Tuple[str] = tuple(
+    method_name for method_name in dir(DataclassParser) if not method_name.startswith("_")
+)
+
+
+def _wrap_dataclass(cls: dataclass, kwargs: Dict[str, Any]) -> Type[DataclassParser]:
+    parser_maker = DataclassParserMaker(cls, **kwargs)
+    for method_name in _dataclass_parser_methods:
+        setattr(cls, method_name, ClassOrInstanceMethod(getattr(parser_maker, method_name)))
+    return cls
+
+
+def as_parser(cls=None, /, **kwargs):
+    """Decorator that adds `DataclassParser` methods to the dataclass"""
+    if cls is not None:
+        return _wrap_dataclass(cls, kwargs)
+    else:
+
+        def decorator(container_class):
+            return _wrap_dataclass(container_class, kwargs)
+
         return decorator

@@ -28,16 +28,18 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 """
 from dataclasses import dataclass
+
 from classparse import as_parser
 
 
 @as_parser
 @dataclass
 class SimpleArgs:
-    """ My simple program's arguments """
+    """My simple program's arguments"""
+
     retries: int = 5  # number of retries
     eps: float = 1e-3  # epsilon
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print(SimpleArgs.parse_args())

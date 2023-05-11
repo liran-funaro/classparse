@@ -45,11 +45,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 keywords = ["argparse", "dataclass"]
-dependencies = []
+dependencies = ["PyYAML"]
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
-dev = ["black", "bumpver", "isort", "pip-tools", "pytest", "pytest-cov", "coveralls"]
+dev = ["bumpver", "black", "flake8", "pip-tools", "pytest", "pytest-cov", "coveralls"]
 
 [project.urls]
 Homepage = "https://github.com/liran-funaro/classparse"

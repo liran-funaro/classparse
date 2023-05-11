@@ -28,13 +28,24 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 """
 from dataclasses import dataclass
+
 from classparse import as_parser
 
 
 @as_parser
 @dataclass(frozen=True)
-class SimpleTestClass:
+class OneArgClass:
     """
     Testing simple dataclass
     """
+
+    one_arg: str = "test"
+
+
+@dataclass(frozen=True)
+class OneArgNoParserClass:
+    """
+    Testing simple dataclass with no parser
+    """
+
     one_arg: str = "test"
