@@ -110,7 +110,9 @@ def _obj_to_yaml_dict(o):
         return [_obj_to_yaml_dict(v) for v in o]
     if isinstance(o, enum.Enum):
         return o.name
-    return o
+    elif isinstance(o, (int, float, bool)) or o is None:
+        return o
+    return str(o)
 
 
 def _yaml_dict_to_obj(o, value_type: Union[Callable, Dict[str, Callable]]):

@@ -36,6 +36,7 @@ import enum
 import io
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -149,15 +150,17 @@ def test_all_parameters(enum_value_func):
         int_enum_choice_arg=Animal.Dog,
         literal_arg="b",
         literal_int_arg=2,
+        mixed_literal=2,
         just_optional_arg="test-opt",
         optional_arg=100,
         optional_choice_arg=Action.Initialize,
         union_arg=1e-3,
-        union_list=[500, 1e-8, "test-union"],
+        union_list=[500, 1e-8, "test-union", False, True],
         flag_arg=20,
         required_arg=1e-6,
         int_list=[30, 40],
         int_2_list=[5, 6],
+        multi_type_tuple=[100, 1e-10, "test"],
         actions=[Action.Initialize, Action.Execute],
         animals=[Animal.Cat, Animal.Dog],
         literal_list=["bb", "bb", "aa"],
@@ -166,10 +169,14 @@ def test_all_parameters(enum_value_func):
         none_bool_arg=True,
         true_bool_arg=not no_bool_support(),
         false_bool_arg=True,
+        path_arg=Path("/a/b"),
+        complex_arg=complex(-1, 2),
     )
     args = dataclass_to_args(expected_params, enum_value_func=enum_value_func)
+    print()
     print(args)
     p1 = AllOptions.parse_args(args=args)
+    print(p1)
     assert isinstance(p1, AllOptions)
     assert expected_params == p1
 

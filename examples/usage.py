@@ -30,6 +30,7 @@ POSSIBILITY OF SUCH DAMAGE.
 import dataclasses
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
 from classparse import arg, as_parser, no_arg, pos_arg, to_arg_name, to_var_name
@@ -71,10 +72,12 @@ class AllOptions:
     int_enum_choice_arg: Animal = Animal.Cat  # IntEnum ==> choice argument (type=%(type)s, default=%(default)s)
     literal_arg: Literal["a", "b", "c"] = None  # Literal ==> choice argument (type=%(type)s, default=%(default)s)
     literal_int_arg: Literal[1, 2, 3] = None  # Literal's type is automatically inferred (type=%(type)s)
+    mixed_literal: Literal[1, 2, "3", "4", True] = None  # We can mix multiple literal types (type=%(type)s)
     optional_arg: Optional[int] = None  # Optional can be used for type hinting (type=%(type)s)
     just_optional_arg: Optional = None  # Bare optional also works (type=%(type)s)
     optional_choice_arg: Optional[Action] = None  # Nested types are supported (type=%(type)s)
-    union_arg: Union[int, float] = None  # Tries to convert to type in order until first success (type=%(type)s)
+    union_arg: Union[int, float, bool] = None  # Tries to convert to type in order until first success (type=%(type)s)
+    path_arg: Path = None
     flag_arg: int = arg(
         "-f",
         help=(
@@ -88,15 +91,17 @@ class AllOptions:
     metavar_arg: str = arg(metavar="M")  # E.g., metavar=%(metavar)s
     int_list: List[int] = (1,)  # List type hint ==> nargs="+" (type=%(type)s)
     int_2_list: Tuple[int, int] = (1, 2)  # Tuple type hint ==> nargs=<tuple length> (nargs=%(nargs)s, type=%(type)s)
-    actions: List[Action] = ()  # List[Enum] ==> choices with nargs="+"
-    animals: List[Animal] = ()  # List[Enum] ==> choices with nargs="+"
+    multi_type_tuple: Tuple[int, float, str] = (1, 1e-3, "a")  # We can use multiple types (type=%(type)s)
+    actions: List[Action] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
+    animals: List[Animal] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
     literal_list: List[Literal["aa", "bb"]] = ("aa",)  # List[Literal] ==> choices with nargs="+"
-    union_list: List[Union[int, float, str]] = ()
+    union_list: List[Union[int, float, str, bool]] = ()
     typeless_list: list = ()  # If list type is unspecified, then it uses argparse default (type=%(type)s)
     typeless_typing_list: List = ()  # typing.List or list are supported
     none_bool_arg: bool = None  # boolean args ==> argparse.BooleanOptionalAction (type=%(type)s)
     true_bool_arg: bool = True  # We can set any default value
     false_bool_arg: bool = False
+    complex_arg: complex = complex(1, -1)
 
     # no_arg() is used to not include this argument in the parser.
     # The first argument (optional) sets the default value.

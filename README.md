@@ -87,6 +87,7 @@ This example demonstrates all the usage scenarios of this library.
 import dataclasses
 from dataclasses import dataclass
 from enum import Enum, auto
+from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
 from classparse import arg, as_parser, no_arg, pos_arg, to_arg_name, to_var_name
@@ -125,10 +126,12 @@ class AllOptions:
     int_enum_choice_arg: Animal = Animal.Cat  # IntEnum ==> choice argument (type=%(type)s, default=%(default)s)
     literal_arg: Literal["a", "b", "c"] = None  # Literal ==> choice argument (type=%(type)s, default=%(default)s)
     literal_int_arg: Literal[1, 2, 3] = None  # Literal's type is automatically inferred (type=%(type)s)
+    mixed_literal: Literal[1, 2, "3", "4", True] = None  # We can mix multiple literal types (type=%(type)s)
     optional_arg: Optional[int] = None  # Optional can be used for type hinting (type=%(type)s)
     just_optional_arg: Optional = None  # Bare optional also works (type=%(type)s)
     optional_choice_arg: Optional[Action] = None  # Nested types are supported (type=%(type)s)
-    union_arg: Union[int, float] = None  # Tries to convert to type in order until first success (type=%(type)s)
+    union_arg: Union[int, float, bool] = None  # Tries to convert to type in order until first success (type=%(type)s)
+    path_arg: Path = None
     flag_arg: int = arg(
         "-f",
         help=(
@@ -142,15 +145,17 @@ class AllOptions:
     metavar_arg: str = arg(metavar="M")  # E.g., metavar=%(metavar)s
     int_list: List[int] = (1,)  # List type hint ==> nargs="+" (type=%(type)s)
     int_2_list: Tuple[int, int] = (1, 2)  # Tuple type hint ==> nargs=<tuple length> (nargs=%(nargs)s, type=%(type)s)
-    actions: List[Action] = ()  # List[Enum] ==> choices with nargs="+"
-    animals: List[Animal] = ()  # List[Enum] ==> choices with nargs="+"
+    multi_type_tuple: Tuple[int, float, str] = (1, 1e-3, "a")  # We can use multiple types (type=%(type)s)
+    actions: List[Action] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
+    animals: List[Animal] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
     literal_list: List[Literal["aa", "bb"]] = ("aa",)  # List[Literal] ==> choices with nargs="+"
-    union_list: List[Union[int, float, str]] = ()
+    union_list: List[Union[int, float, str, bool]] = ()
     typeless_list: list = ()  # If list type is unspecified, then it uses argparse default (type=%(type)s)
     typeless_typing_list: List = ()  # typing.List or list are supported
     none_bool_arg: bool = None  # boolean args ==> argparse.BooleanOptionalAction (type=%(type)s)
     true_bool_arg: bool = True  # We can set any default value
     false_bool_arg: bool = False
+    complex_arg: complex = complex(1, -1)
 
     # no_arg() is used to not include this argument in the parser.
     # The first argument (optional) sets the default value.
@@ -178,12 +183,15 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--str-enum-choice-arg {Initialize/init,Execute/exec}]
                      [--int-enum-choice-arg {Cat/1,Dog/2}]
                      [--literal-arg {a,b,c}] [--literal-int-arg {1,2,3}]
+                     [--mixed-literal {1,2,3,4,True}]
                      [--optional-arg OPTIONAL_ARG]
                      [--just-optional-arg JUST_OPTIONAL_ARG]
                      [--optional-choice-arg {Initialize/init,Execute/exec}]
-                     [--union-arg UNION_ARG] [-f FLAG_ARG] -r REQUIRED_ARG
-                     [--metavar-arg M] [--int-list INT_LIST [INT_LIST ...]]
+                     [--union-arg UNION_ARG] [--path-arg PATH_ARG]
+                     [-f FLAG_ARG] -r REQUIRED_ARG [--metavar-arg M]
+                     [--int-list INT_LIST [INT_LIST ...]]
                      [--int-2-list INT_2_LIST INT_2_LIST]
+                     [--multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE]
                      [--actions {Initialize/init,Execute/exec} [{Initialize/init,Execute/exec} ...]]
                      [--animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]]
                      [--literal-list {aa,bb} [{aa,bb} ...]]
@@ -193,7 +201,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--none-bool-arg | --no-none-bool-arg]
                      [--true-bool-arg | --no-true-bool-arg]
                      [--false-bool-arg | --no-false-bool-arg]
-                     [-s SHOW [SHOW ...]]
+                     [--complex-arg COMPLEX_ARG] [-s SHOW [SHOW ...]]
                      pos-arg-1 [pos-arg-2]
 
 Class doc string ==> parser description. The fields' inline comment ==>
@@ -220,6 +228,9 @@ options:
                         Literal ==> choice argument (type=str, default=None)
   --literal-int-arg {1,2,3}
                         Literal's type is automatically inferred (type=int)
+  --mixed-literal {1,2,3,4,True}
+                        We can mix multiple literal types
+                        (type=typing.Literal[1, 2, '3', '4', True])
   --optional-arg OPTIONAL_ARG
                         Optional can be used for type hinting (type=int)
   --just-optional-arg JUST_OPTIONAL_ARG
@@ -228,7 +239,8 @@ options:
                         Nested types are supported (type=Action)
   --union-arg UNION_ARG
                         Tries to convert to type in order until first success
-                        (type=typing.Union[int, float])
+                        (type=typing.Union[int, float, bool])
+  --path-arg PATH_ARG   (type: Path)
   -f FLAG_ARG, --flag-arg FLAG_ARG
                         arg() is a wrapper around dataclasses.field().The
                         first argument (optional) is the short argument
@@ -242,14 +254,19 @@ options:
   --int-2-list INT_2_LIST INT_2_LIST
                         Tuple type hint ==> nargs=<tuple length> (nargs=2,
                         type=int)
+  --multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE
+                        We can use multiple types (type=typing.Union[int,
+                        float, str])
   --actions {Initialize/init,Execute/exec} [{Initialize/init,Execute/exec} ...]
-                        List[Enum] ==> choices with nargs="+"
+                        List[Enum] ==> choices with nargs="+" (nargs=+,
+                        type=Action)
   --animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]
-                        List[Enum] ==> choices with nargs="+"
+                        List[Enum] ==> choices with nargs="+" (nargs=+,
+                        type=Animal)
   --literal-list {aa,bb} [{aa,bb} ...]
                         List[Literal] ==> choices with nargs="+"
   --union-list UNION_LIST [UNION_LIST ...]
-                        (type: typing.Union[int, float, str])
+                        (type: typing.Union[int, float, str, bool])
   --typeless-list TYPELESS_LIST [TYPELESS_LIST ...]
                         If list type is unspecified, then it uses argparse
                         default (type=None)
@@ -262,6 +279,8 @@ options:
                         We can set any default value (default: True)
   --false-bool-arg, --no-false-bool-arg
                         (type: bool) (default: False)
+  --complex-arg COMPLEX_ARG
+                        (type: complex)
   -s SHOW [SHOW ...], --show SHOW [SHOW ...]
                         We used this argument for the README example. Note
                         that comments above the arg are also included in the
@@ -296,6 +315,13 @@ animals: [<Animal.Cat: 1>, <Animal.Cat: 1>, <Animal.Dog: 2>, <Animal.Dog: 2>]
   - Requires boilerplate code to create the parser
   - Positional arguments
   - `nargs` support
+
+### [swansonk14/typed-argument-parser](https://github.com/swansonk14/typed-argument-parser)
+  - Creating argument parser from classes and functions
+  - Rich functionality
+  - Post-processing of arguments
+  - Save/load arguments
+  - Load from dict
 
 # License
 
