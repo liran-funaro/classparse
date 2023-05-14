@@ -54,7 +54,7 @@ import yaml
 from classparse import docs
 from classparse.types import _update_field_type
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 NO_ARG = "__no_arg__"
 POS_ARG = "__pos_arg__"
