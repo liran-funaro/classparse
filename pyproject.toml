@@ -75,9 +75,9 @@ push = false
 "LICENSE" = [
     "Copyright (c) 2023-YYYY, Liran Funaro.",
 ]
-"*.py" = [
+"*/*.py" = [
     "Copyright (c) 2023-YYYY, Liran Funaro.",
 ]
-"classparse.py" = [
+"classparse/__init__.py" = [
     "^__version__ = \"{version}\"$",
 ]
