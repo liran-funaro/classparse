@@ -51,7 +51,7 @@ from typing import (
 from classparse import docs
 from classparse.types import _update_field_type, _obj_to_yaml_dict, _yaml_dict_to_obj
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 NO_ARG = "__no_arg__"
 POS_ARG = "__pos_arg__"
 
