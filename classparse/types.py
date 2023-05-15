@@ -201,12 +201,19 @@ def _update_nargs(a: Argument) -> bool:
         return False
 
 
+def _make_metavar(o: Any) -> str:
+    if isinstance(o, enum.Enum):
+        return f"{o.name}/{o.value}"
+    else:
+        return str(o)
+
+
 def _update_enum(a: Argument) -> bool:
     """Enum type is used to define a typed choice argument"""
     assert issubclass(a.type, enum.Enum)
     choices = list(a.type)
     a.args["choices"] = choices
-    a.args["metavar"] = "{%s}" % ",".join([f"{c.name}/{c.value}" for c in choices])
+    a.args["metavar"] = "{%s}" % ",".join(map(_make_metavar, choices))
     cur_default = a.args.get("default", None)
     if isinstance(cur_default, enum.Enum):
         a.args["default"] = cur_default.name
@@ -221,6 +228,8 @@ def _update_literal(a: Argument) -> bool:
     choices_types = set(map(type, a.type_args))
 
     a.args["choices"] = choices
+    a.args["metavar"] = "{%s}" % ",".join(map(_make_metavar, choices))
+
     if len(choices_types) == 1:
         a.args["type"] = list(choices_types)[0]
         return True

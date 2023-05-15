@@ -184,7 +184,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--str-enum-choice-arg {Initialize/init,Execute/exec}]
                      [--int-enum-choice-arg {Cat/1,Dog/2}]
                      [--literal-arg {a,b,c}] [--literal-int-arg {1,2,3}]
-                     [--mixed-literal {1,2,3,4,True,Animal.Cat}]
+                     [--mixed-literal {1,2,3,4,True,Cat/1}]
                      [--optional-arg OPTIONAL_ARG]
                      [--just-optional-arg JUST_OPTIONAL_ARG]
                      [--optional-choice-arg {Initialize/init,Execute/exec}]
@@ -195,7 +195,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE]
                      [--actions {Initialize/init,Execute/exec} [{Initialize/init,Execute/exec} ...]]
                      [--animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]]
-                     [--literal-list {aa,bb,11,22,Animal.Cat} [{aa,bb,11,22,Animal.Cat} ...]]
+                     [--literal-list {aa,bb,11,22,Cat/1} [{aa,bb,11,22,Cat/1} ...]]
                      [--union-list UNION_LIST [UNION_LIST ...]]
                      [--union-with-literal UNION_WITH_LITERAL [UNION_WITH_LITERAL ...]]
                      [--typeless-list TYPELESS_LIST [TYPELESS_LIST ...]]
@@ -230,7 +230,7 @@ options:
                         Literal ==> choice argument (type=str, default=None)
   --literal-int-arg {1,2,3}
                         Literal's type is automatically inferred (type=int)
-  --mixed-literal {1,2,3,4,True,Animal.Cat}
+  --mixed-literal {1,2,3,4,True,Cat/1}
                         We can mix multiple literal types
                         (type=typing.Literal[1, 2, '3', '4', True,
                         <Animal.Cat: 1>])
@@ -266,7 +266,7 @@ options:
   --animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]
                         List[Enum] ==> choices with nargs="+" (nargs=+,
                         type=Animal)
-  --literal-list {aa,bb,11,22,Animal.Cat} [{aa,bb,11,22,Animal.Cat} ...]
+  --literal-list {aa,bb,11,22,Cat/1} [{aa,bb,11,22,Cat/1} ...]
                         List[Literal] ==> choices with nargs="+"
   --union-list UNION_LIST [UNION_LIST ...]
                         (type: typing.Union[int, float, str, bool])
