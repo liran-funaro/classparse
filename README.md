@@ -108,7 +108,7 @@ class Animal(Enum):
 class AllOptions:
     """
     Class doc string ==> parser description.
-    The fields' inline comment ==> argument's help.
+    The fields' inline/above comment ==> argument's help.
     """
 
     pos_arg_1: str  # Field with no explicit default ==> positional arguments (default=%(default)s)
@@ -206,7 +206,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--complex-arg COMPLEX_ARG] [-s SHOW [SHOW ...]]
                      pos-arg-1 [pos-arg-2]
 
-Class doc string ==> parser description. The fields' inline comment ==>
+Class doc string ==> parser description. The fields' inline/above comment ==>
 argument's help.
 
 positional arguments:

@@ -224,6 +224,17 @@ def test_all_parameters(enum_value_func):
     p2 = AllOptions.load_yaml(yaml_str)
     assert expected_params2 == p2
 
+    dict_obj = expected_params2.asdict()
+    p2 = AllOptions.from_dict(dict_obj)
+    assert expected_params2 == p2
+
+    dict_obj = expected_params2.get_vars()
+    p2 = AllOptions.from_dict(dict_obj)
+    assert expected_params2 == p2
+
+    p2 = AllOptions.from_dict(expected_params2)
+    assert expected_params2 == p2
+
 
 def test_simple_all_parameters():
     expected_params = OneArgClass(one_arg="test")

@@ -32,7 +32,7 @@ import enum
 import functools
 import itertools
 import typing
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union, Callable
 
 _TYPE_RECURSION_LIMIT = 1024
 
@@ -268,3 +268,27 @@ def _update_field_type(argument_args: Dict[str, Any]):
     # Some types are recursive, so we iterate until no special type is matched
     while _update_field_type_internal(a) and next(iter_count) < _TYPE_RECURSION_LIMIT:
         a.update_type()
+
+
+def _obj_to_yaml_dict(o):
+    if isinstance(o, dict):
+        return {k: _obj_to_yaml_dict(v) for k, v in o.items()}
+    if isinstance(o, (tuple, list)):
+        return [_obj_to_yaml_dict(v) for v in o]
+    if isinstance(o, enum.Enum):
+        return o.name
+    if isinstance(o, (int, float, bool)) or o is None:
+        return o
+    else:
+        return str(o)
+
+
+def _yaml_dict_to_obj(o, value_type: Union[Callable, Dict[str, Callable]]):
+    if isinstance(o, dict):
+        return {k: _yaml_dict_to_obj(v, value_type.get(k, None)) for k, v in o.items()}
+    if isinstance(o, (tuple, list)):
+        return [_yaml_dict_to_obj(v, value_type) for v in o]
+    if callable(value_type) and isinstance(o, str):
+        return value_type(o)
+    else:
+        return o

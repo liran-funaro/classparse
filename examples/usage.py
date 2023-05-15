@@ -54,7 +54,7 @@ class Animal(Enum):
 class AllOptions:
     """
     Class doc string ==> parser description.
-    The fields' inline comment ==> argument's help.
+    The fields' inline/above comment ==> argument's help.
     """
 
     pos_arg_1: str  # Field with no explicit default ==> positional arguments (default=%(default)s)

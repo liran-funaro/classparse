@@ -29,16 +29,15 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 """
+import yaml
 import argparse
 import dataclasses
-import enum
 import functools
 import typing
 from dataclasses import dataclass
 from types import MethodType
 from typing import (
     Any,
-    Callable,
     Dict,
     Iterable,
     List,
@@ -49,13 +48,10 @@ from typing import (
     Union,
 )
 
-import yaml
-
 from classparse import docs
-from classparse.types import _update_field_type
+from classparse.types import _update_field_type, _obj_to_yaml_dict, _yaml_dict_to_obj
 
 __version__ = "0.1.1"
-
 NO_ARG = "__no_arg__"
 POS_ARG = "__pos_arg__"
 
@@ -103,30 +99,6 @@ def _name_or_flags_arg(arg_name: str, flag: Optional[str] = None, positional: bo
     return filter(None, [flag, f"--{arg_name}"])
 
 
-def _obj_to_yaml_dict(o):
-    if isinstance(o, dict):
-        return {k: _obj_to_yaml_dict(v) for k, v in o.items()}
-    if isinstance(o, (tuple, list)):
-        return [_obj_to_yaml_dict(v) for v in o]
-    if isinstance(o, enum.Enum):
-        return o.name
-    elif isinstance(o, (int, float, bool)) or o is None:
-        return o
-    return str(o)
-
-
-def _yaml_dict_to_obj(o, value_type: Union[Callable, Dict[str, Callable]]):
-    if isinstance(o, dict):
-        return {k: _yaml_dict_to_obj(v, value_type.get(k, None)) for k, v in o.items()}
-    if isinstance(o, (tuple, list)):
-        return [_yaml_dict_to_obj(v, value_type) for v in o]
-
-    if callable(value_type) and isinstance(o, str):
-        return value_type(o)
-    else:
-        return o
-
-
 class DataclassParser(typing.Protocol):  # pragma: no cover
     @classmethod
     def get_vars(cls) -> Dict[str, Any]:
@@ -134,6 +106,10 @@ class DataclassParser(typing.Protocol):  # pragma: no cover
 
     @classmethod
     def asdict(cls) -> Dict[str, Any]:
+        ...
+
+    @classmethod
+    def from_dict(cls, namespace: Dict[str, Any]) -> "DataclassParser":
         ...
 
     @classmethod
@@ -202,13 +178,16 @@ class DataclassParserMaker:
         self.args = []
 
         for field in dataclasses.fields(cls):
-            self.add_argument_from_field(field)
+            self._add_argument_from_field(field)
 
-        self.all_types = {name: kwargs.get("type", None) for name, _, kwargs in self.args}
-        self.all_defaults = {name: kwargs.get("default", None) for name, _, kwargs in self.args}
+        self.all_types = self._get_all_kwarg("type")
+        self.all_defaults = self._get_all_kwarg("default")
         self.main_parser = self.make()
 
-    def add_argument_from_field(self, field: dataclasses.Field):
+    def _get_all_kwarg(self, arg_name):
+        return {name: kwargs.get(arg_name, None) for name, _, kwargs in self.args}
+
+    def _add_argument_from_field(self, field: dataclasses.Field):
         # Arguments precedence: field.metadata, default_argument_args
         kwargs = dict(self.default_argument_args)
         kwargs.update(field.metadata)
@@ -256,7 +235,9 @@ class DataclassParserMaker:
         return parser
 
     def cast_to_class(self, namespace) -> dataclass:
-        return self.cls(**{to_var_name(k): v for k, v in vars(namespace).items()})
+        if not isinstance(namespace, dict):
+            namespace = vars(namespace)
+        return self.cls(**{to_var_name(k): v for k, v in namespace.items()})
 
     def get_vars(self, instance_or_cls) -> Dict[str, Any]:
         if isinstance(instance_or_cls, type):
@@ -266,6 +247,15 @@ class DataclassParserMaker:
 
     def asdict(self, instance_or_cls) -> Dict[str, Any]:
         return {to_arg_name(k): v for k, v in self.get_vars(instance_or_cls).items()}
+
+    def from_dict(self, instance_or_cls, namespace: Union[Any, Dict[str, Any]]) -> DataclassParser:
+        if not isinstance(namespace, dict):
+            namespace = vars(namespace)
+
+        defaults = self.get_vars(instance_or_cls)
+        iter_namespace = ((to_var_name(k), v) for k, v in namespace.items())
+        defaults.update({k: v for k, v in iter_namespace if k in defaults})
+        return self.cast_to_class(defaults)
 
     def dump_yaml(self, instance_or_cls, stream=None, **kwargs) -> str:
         cur_vars = self.get_vars(instance_or_cls)
