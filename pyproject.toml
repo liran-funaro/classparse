@@ -69,7 +69,7 @@ push = false
     "Copyright (c) 2023-YYYY, Liran Funaro.",
 ]
 "README.md" = [
-    "classparse@{version}",
+    "classparse=={version}",
     "Copyright (c) 2023-YYYY, Liran Funaro.",
 ]
 "LICENSE" = [
