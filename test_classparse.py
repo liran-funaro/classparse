@@ -163,7 +163,7 @@ def test_all_parameters(enum_value_func):
         multi_type_tuple=[100, 1e-10, "test"],
         actions=[Action.Initialize, Action.Execute],
         animals=[Animal.Cat, Animal.Dog],
-        literal_list=["bb", "bb", "aa"],
+        literal_list=["bb", "bb", "aa", 22, Animal.Cat],
         typeless_list=["a", "b"],
         typeless_typing_list=["c", "d"],
         none_bool_arg=True,
@@ -171,6 +171,7 @@ def test_all_parameters(enum_value_func):
         false_bool_arg=True,
         path_arg=Path("/a/b"),
         complex_arg=complex(-1, 2),
+        union_with_literal=["a", "b", 2, 1],
     )
     args = dataclass_to_args(expected_params, enum_value_func=enum_value_func)
     print()
@@ -245,6 +246,16 @@ def test_simple_no_decorator():
 def test_bad_union_type():
     with pytest.raises(SystemExit):
         AllOptions.parse_args(args=["--union-arg", "not-number"])
+
+
+def test_bad_literal():
+    with pytest.raises(SystemExit):
+        AllOptions.parse_args(args=["--mixed-literal", "invalid"])
+
+
+def test_bad_literal_in_union():
+    with pytest.raises(SystemExit):
+        AllOptions.parse_args(args=["--union-with-literal", "invalid"])
 
 
 def test_non_dataclass():

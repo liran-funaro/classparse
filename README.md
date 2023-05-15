@@ -126,7 +126,7 @@ class AllOptions:
     int_enum_choice_arg: Animal = Animal.Cat  # IntEnum ==> choice argument (type=%(type)s, default=%(default)s)
     literal_arg: Literal["a", "b", "c"] = None  # Literal ==> choice argument (type=%(type)s, default=%(default)s)
     literal_int_arg: Literal[1, 2, 3] = None  # Literal's type is automatically inferred (type=%(type)s)
-    mixed_literal: Literal[1, 2, "3", "4", True] = None  # We can mix multiple literal types (type=%(type)s)
+    mixed_literal: Literal[1, 2, "3", "4", True, Animal.Cat] = None  # We can mix multiple literal types (type=%(type)s)
     optional_arg: Optional[int] = None  # Optional can be used for type hinting (type=%(type)s)
     just_optional_arg: Optional = None  # Bare optional also works (type=%(type)s)
     optional_choice_arg: Optional[Action] = None  # Nested types are supported (type=%(type)s)
@@ -148,8 +148,9 @@ class AllOptions:
     multi_type_tuple: Tuple[int, float, str] = (1, 1e-3, "a")  # We can use multiple types (type=%(type)s)
     actions: List[Action] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
     animals: List[Animal] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
-    literal_list: List[Literal["aa", "bb"]] = ("aa",)  # List[Literal] ==> choices with nargs="+"
+    literal_list: List[Literal["aa", "bb", 11, 22, Animal.Cat]] = ("aa",)  # List[Literal] ==> choices with nargs="+"
     union_list: List[Union[int, float, str, bool]] = ()
+    union_with_literal: List[Union[Literal["a", "b", 1, 2], float, bool]] = ()
     typeless_list: list = ()  # If list type is unspecified, then it uses argparse default (type=%(type)s)
     typeless_typing_list: List = ()  # typing.List or list are supported
     none_bool_arg: bool = None  # boolean args ==> argparse.BooleanOptionalAction (type=%(type)s)
@@ -183,7 +184,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--str-enum-choice-arg {Initialize/init,Execute/exec}]
                      [--int-enum-choice-arg {Cat/1,Dog/2}]
                      [--literal-arg {a,b,c}] [--literal-int-arg {1,2,3}]
-                     [--mixed-literal {1,2,3,4,True}]
+                     [--mixed-literal {1,2,3,4,True,Animal.Cat}]
                      [--optional-arg OPTIONAL_ARG]
                      [--just-optional-arg JUST_OPTIONAL_ARG]
                      [--optional-choice-arg {Initialize/init,Execute/exec}]
@@ -194,8 +195,9 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE]
                      [--actions {Initialize/init,Execute/exec} [{Initialize/init,Execute/exec} ...]]
                      [--animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]]
-                     [--literal-list {aa,bb} [{aa,bb} ...]]
+                     [--literal-list {aa,bb,11,22,Animal.Cat} [{aa,bb,11,22,Animal.Cat} ...]]
                      [--union-list UNION_LIST [UNION_LIST ...]]
+                     [--union-with-literal UNION_WITH_LITERAL [UNION_WITH_LITERAL ...]]
                      [--typeless-list TYPELESS_LIST [TYPELESS_LIST ...]]
                      [--typeless-typing-list TYPELESS_TYPING_LIST [TYPELESS_TYPING_LIST ...]]
                      [--none-bool-arg | --no-none-bool-arg]
@@ -228,9 +230,10 @@ options:
                         Literal ==> choice argument (type=str, default=None)
   --literal-int-arg {1,2,3}
                         Literal's type is automatically inferred (type=int)
-  --mixed-literal {1,2,3,4,True}
+  --mixed-literal {1,2,3,4,True,Animal.Cat}
                         We can mix multiple literal types
-                        (type=typing.Literal[1, 2, '3', '4', True])
+                        (type=typing.Literal[1, 2, '3', '4', True,
+                        <Animal.Cat: 1>])
   --optional-arg OPTIONAL_ARG
                         Optional can be used for type hinting (type=int)
   --just-optional-arg JUST_OPTIONAL_ARG
@@ -263,10 +266,13 @@ options:
   --animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]
                         List[Enum] ==> choices with nargs="+" (nargs=+,
                         type=Animal)
-  --literal-list {aa,bb} [{aa,bb} ...]
+  --literal-list {aa,bb,11,22,Animal.Cat} [{aa,bb,11,22,Animal.Cat} ...]
                         List[Literal] ==> choices with nargs="+"
   --union-list UNION_LIST [UNION_LIST ...]
                         (type: typing.Union[int, float, str, bool])
+  --union-with-literal UNION_WITH_LITERAL [UNION_WITH_LITERAL ...]
+                        (type: typing.Union[typing.Literal['a', 'b', 1, 2],
+                        float, bool])
   --typeless-list TYPELESS_LIST [TYPELESS_LIST ...]
                         If list type is unspecified, then it uses argparse
                         default (type=None)

@@ -109,6 +109,10 @@ def _is_str_type(t):
     return _is_type(t, str)
 
 
+def _is_none_type(t):
+    return t is None or _is_type(t, type(None))
+
+
 def _is_literal_type(t):
     return typing.get_origin(t) is Literal
 
@@ -172,7 +176,7 @@ def _update_optional(a: Argument) -> bool:
 
 def _update_union(a: Argument) -> bool:
     """Optional annotation with a type (interpreted as a Union), Union"""
-    arg_set = [v for v in a.type_args if not issubclass(v, type(None)) and v is not None]
+    arg_set = [t for t in a.type_args if not _is_none_type(t)]
     if len(arg_set) == 1:
         # For union of one type (other than None), we support further inspection of the type
         a.args["type"] = a.type_args[0]
@@ -213,21 +217,20 @@ def _update_enum(a: Argument) -> bool:
 def _update_literal(a: Argument) -> bool:
     """Literal type is used to define an untyped choice argument"""
     choices = list(a.type_args)
+    assert len(choices) > 0, "'Literal' must have at least one parameter."
     choices_types = set(map(type, a.type_args))
 
     a.args["choices"] = choices
     if len(choices_types) == 1:
         a.args["type"] = list(choices_types)[0]
         return True
-    elif len(choices_types) == 0:
-        del a.args["type"]
     else:
         a.args["type"] = __make_literal_parser(a.type, raise_error=False)
         return False
 
 
 def _update_bool(a: Argument) -> bool:
-    """bool type is used to define a store_true argument"""
+    """bool type is used to define a BooleanOptionalAction argument"""
     if hasattr(argparse, "BooleanOptionalAction"):
         a.args["action"] = argparse.BooleanOptionalAction
     else:
