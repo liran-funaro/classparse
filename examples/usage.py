@@ -33,7 +33,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
-from classparse import arg, as_parser, no_arg, pos_arg, to_arg_name, to_var_name
+from classparse import arg, classparser, no_arg, pos_arg, to_arg_name, to_var_name
 
 
 class Action(Enum):
@@ -46,7 +46,7 @@ class Animal(Enum):
     Dog = auto()
 
 
-@as_parser(
+@classparser(
     prog="my_program.py",  # Keyword arguments are passed to the parser init.
     default_argument_args=dict(help="(type: %(type)s)"),  # Set default arguments for each call of add_argument().
 )

@@ -37,7 +37,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-from classparse import arg, as_parser
+from classparse import arg, classparser
 
 embed_pattern = re.compile(
     (
@@ -64,7 +64,7 @@ execute_pattern = re.compile(
 )
 
 
-@as_parser
+@classparser
 @dataclass(frozen=True)
 class UpdateArgs:
     verify: bool = arg("-v", False)  # Verifies the output matches

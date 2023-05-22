@@ -34,7 +34,7 @@ mod_code = """
 import dataclasses
 import classparse
 
-@classparse.as_parser(prog="no_source")
+@classparse.classparser(prog="no_source")
 @dataclasses.dataclass(frozen=True)
 class NoSourceTestClass:
     "Doc"

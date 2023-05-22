@@ -109,3 +109,6 @@ venv.bak/
 README.out.md
 requirements.txt
 htmlReport
+test_workflow.sh
+release.sh
+test_try/*

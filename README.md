@@ -42,13 +42,14 @@ pip install classparse==0.1.3
 # Simple Example
 This is a simple example of the most basic usage of this library.
 <!-- embed: examples/simple.py -->
+
 ```python
 # examples/simple.py
 from dataclasses import dataclass
 
-from classparse import as_parser
+from classparse import classparser
 
-@as_parser
+@classparser
 @dataclass
 class SimpleArgs:
     """My simple program's arguments"""
@@ -82,6 +83,7 @@ SimpleArgs(retries=10, eps=1e-06)
 # Exhaustive Usage Example
 This example demonstrates all the usage scenarios of this library.
 <!-- embed: examples/usage.py -->
+
 ```python
 # examples/usage.py
 import dataclasses
@@ -90,7 +92,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
-from classparse import arg, as_parser, no_arg, pos_arg, to_arg_name, to_var_name
+from classparse import arg, classparser, no_arg, pos_arg, to_arg_name, to_var_name
 
 class Action(Enum):
     Initialize = "init"
@@ -100,7 +102,7 @@ class Animal(Enum):
     Cat = auto()
     Dog = auto()
 
-@as_parser(
+@classparser(
     prog="my_program.py",  # Keyword arguments are passed to the parser init.
     default_argument_args=dict(help="(type: %(type)s)"),  # Set default arguments for each call of add_argument().
 )

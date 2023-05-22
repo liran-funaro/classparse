@@ -29,10 +29,10 @@ POSSIBILITY OF SUCH DAMAGE.
 """
 from dataclasses import dataclass
 
-from classparse import as_parser
+from classparse import classparser
 
 
-@as_parser
+@classparser
 @dataclass
 class SimpleArgs:
     """My simple program's arguments"""

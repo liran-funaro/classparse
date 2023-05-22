@@ -29,27 +29,31 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 """
-import yaml
 import argparse
 import dataclasses
 import functools
 import typing
-from dataclasses import dataclass
 from types import MethodType
 from typing import (
     Any,
+    Callable,
     Dict,
+    Generic,
     Iterable,
     List,
     Optional,
+    Protocol,
     Sequence,
     Tuple,
     Type,
+    TypeVar,
     Union,
 )
 
+import yaml
+
 from classparse import docs
-from classparse.types import _update_field_type, _obj_to_yaml_dict, _yaml_dict_to_obj
+from classparse.types import _obj_to_yaml_dict, _update_field_type, _yaml_dict_to_obj
 
 __version__ = "0.1.3"
 NO_ARG = "__no_arg__"
@@ -99,7 +103,13 @@ def _name_or_flags_arg(arg_name: str, flag: Optional[str] = None, positional: bo
     return filter(None, [flag, f"--{arg_name}"])
 
 
-class DataclassParser(typing.Protocol):  # pragma: no cover
+T = TypeVar("T")
+
+
+class DataclassParser(Protocol[T]):  # pragma: no cover
+    def __new__(cls) -> Union["DataclassParser[T]", T]:
+        ...
+
     @classmethod
     def get_vars(cls) -> Dict[str, Any]:
         ...
@@ -109,15 +119,15 @@ class DataclassParser(typing.Protocol):  # pragma: no cover
         ...
 
     @classmethod
-    def from_dict(cls, namespace: Dict[str, Any]) -> "DataclassParser":
+    def from_dict(cls, namespace: Dict[str, Any]) -> Union["DataclassParser[T]", T]:
         ...
 
     @classmethod
-    def dump_yaml(cls, stream=None, **kwargs) -> str:
+    def dump_yaml(cls, stream=None, **kwargs) -> Optional[str]:
         ...
 
     @classmethod
-    def load_yaml(cls, stream) -> "DataclassParser":
+    def load_yaml(cls, stream) -> Union["DataclassParser[T]", T]:
         ...
 
     @classmethod
@@ -141,43 +151,48 @@ class DataclassParser(typing.Protocol):  # pragma: no cover
         ...
 
     @classmethod
-    def parse_args(cls, args: Optional[Sequence[str]] = None) -> "DataclassParser":
+    def parse_args(cls, args: Optional[Sequence[str]] = None) -> Union["DataclassParser[T]", T]:
         ...
 
     @classmethod
-    def parse_intermixed_args(cls, args: Optional[Sequence[str]] = None) -> "DataclassParser":
+    def parse_intermixed_args(cls, args: Optional[Sequence[str]] = None) -> Union["DataclassParser[T]", T]:
         ...
 
     @classmethod
-    def parse_known_args(cls, args: Optional[Sequence[str]] = None) -> Tuple["DataclassParser", List[str]]:
+    def parse_known_args(cls, args: Optional[Sequence[str]] = None) -> Tuple[Union["DataclassParser[T]", T], List[str]]:
         ...
 
     @classmethod
-    def parse_known_intermixed_args(cls, args: Optional[Sequence[str]] = None) -> Tuple["DataclassParser", List[str]]:
+    def parse_known_intermixed_args(
+        cls, args: Optional[Sequence[str]] = None
+    ) -> Tuple[Union["DataclassParser[T]", T], List[str]]:
         ...
 
 
-class DataclassParserMaker:
-    def __init__(self, cls: dataclass, default_argument_args=None, **parser_args):
-        if not dataclasses.is_dataclass(cls):
+DataClass = TypeVar("DataClass")
+
+
+class DataclassParserMaker(Generic[DataClass]):
+    def __init__(self, instance_or_cls: Union[Type[DataClass], DataClass], default_argument_args=None, **parser_args):
+        if not dataclasses.is_dataclass(instance_or_cls):
             raise TypeError("Cannot operate on a non-dataclass object.")
 
-        if not isinstance(cls, type):
-            cls = type(cls)
-
-        self.cls = cls
+        if isinstance(instance_or_cls, type):
+            self.cls = instance_or_cls
+        else:
+            self.cls = type(instance_or_cls)
 
         if default_argument_args is None:
             default_argument_args = {}
         self.default_argument_args = default_argument_args
 
-        parser_args.setdefault("description", cls.__doc__)
+        parser_args.setdefault("description", self.cls.__doc__)
         self.parser_args = parser_args
 
-        self.docs = docs.get_argument_docs(cls)
+        self.docs = docs.get_argument_docs(self.cls)
         self.args = []
 
-        for field in dataclasses.fields(cls):
+        for field in dataclasses.fields(self.cls):
             self._add_argument_from_field(field)
 
         self.all_types = self._get_all_kwarg("type")
@@ -218,13 +233,12 @@ class DataclassParserMaker:
 
         self.args.append((field.name, args, kwargs))
 
-    def make(self, default_values: Union[dataclass, Dict[str, Any], None] = None):
+    def make(self, default_values: Optional[DataClass] = None) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(**self.parser_args)
         if dataclasses.is_dataclass(default_values):
             default_values = dataclasses.asdict(default_values)
-        if isinstance(default_values, dict):
-            default_values = {to_var_name(k): v for k, v in default_values.items()}
-        if default_values is None:
+        else:
+            assert default_values is None
             default_values = {}
 
         for name, args, kwargs in self.args:
@@ -234,21 +248,23 @@ class DataclassParserMaker:
 
         return parser
 
-    def cast_to_class(self, namespace) -> dataclass:
+    def cast_to_class(self, namespace) -> Union[DataclassParser[DataClass], DataClass]:
         if not isinstance(namespace, dict):
             namespace = vars(namespace)
         return self.cls(**{to_var_name(k): v for k, v in namespace.items()})
 
-    def get_vars(self, instance_or_cls) -> Dict[str, Any]:
+    def get_vars(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> Dict[str, Any]:
         if isinstance(instance_or_cls, type):
             return dict(self.all_defaults)
         else:
             return dataclasses.asdict(instance_or_cls)
 
-    def asdict(self, instance_or_cls) -> Dict[str, Any]:
+    def asdict(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> Dict[str, Any]:
         return {to_arg_name(k): v for k, v in self.get_vars(instance_or_cls).items()}
 
-    def from_dict(self, instance_or_cls, namespace: Union[Any, Dict[str, Any]]) -> DataclassParser:
+    def from_dict(
+        self, instance_or_cls: Union[Type[DataClass], DataClass], namespace: Union[Any, Dict[str, Any]]
+    ) -> Union[DataclassParser[DataClass], DataClass]:
         if not isinstance(namespace, dict):
             namespace = vars(namespace)
 
@@ -257,68 +273,78 @@ class DataclassParserMaker:
         defaults.update({k: v for k, v in iter_namespace if k in defaults})
         return self.cast_to_class(defaults)
 
-    def dump_yaml(self, instance_or_cls, stream=None, **kwargs) -> str:
+    def dump_yaml(self, instance_or_cls: Union[Type[DataClass], DataClass], stream=None, **kwargs) -> str:
         cur_vars = self.get_vars(instance_or_cls)
         cur_vars = _obj_to_yaml_dict(cur_vars)
         return yaml.safe_dump(cur_vars, stream=stream, **kwargs)
 
-    def load_yaml(self, instance_or_cls, stream) -> DataclassParser:
+    def load_yaml(
+        self, instance_or_cls: Union[Type[DataClass], DataClass], stream
+    ) -> Union[DataclassParser[DataClass], DataClass]:
         cur_vars = self.get_vars(instance_or_cls)
         loaded_vars = yaml.safe_load(stream)
         loaded_vars = _yaml_dict_to_obj(loaded_vars, self.all_types)
         cur_vars.update(loaded_vars)
         return self.cls(**cur_vars)
 
-    def _get_parser(self, instance_or_cls) -> argparse.ArgumentParser:
+    def _get_parser(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> argparse.ArgumentParser:
         if isinstance(instance_or_cls, type):
             return self.main_parser
         else:
             return self.make(instance_or_cls)
 
-    def get_parser(self, instance_or_cls) -> argparse.ArgumentParser:
+    def get_parser(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> argparse.ArgumentParser:
         return self.make(instance_or_cls if not isinstance(instance_or_cls, type) else None)
 
-    def format_help(self, instance_or_cls) -> str:
+    def format_help(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> str:
         return self._get_parser(instance_or_cls).format_help()
 
-    def format_usage(self, instance_or_cls) -> str:
+    def format_usage(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> str:
         return self._get_parser(instance_or_cls).format_usage()
 
-    def print_help(self, instance_or_cls, file=None):
+    def print_help(self, instance_or_cls: Union[Type[DataClass], DataClass], file=None):
         return self._get_parser(instance_or_cls).print_help(file)
 
-    def print_usage(self, instance_or_cls, file=None):
+    def print_usage(self, instance_or_cls: Union[Type[DataClass], DataClass], file=None):
         return self._get_parser(instance_or_cls).print_usage(file)
 
-    def parse_args(self, instance_or_cls, args: Optional[Sequence[str]] = None) -> DataclassParser:
+    def parse_args(
+        self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
+    ) -> Union[DataclassParser[DataClass], DataClass]:
         namespace = self._get_parser(instance_or_cls).parse_args(args=args)
         return self.cast_to_class(namespace)
 
-    def parse_intermixed_args(self, instance_or_cls, args: Optional[Sequence[str]] = None) -> DataclassParser:
+    def parse_intermixed_args(
+        self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
+    ) -> Union[DataclassParser[DataClass], DataClass]:
         namespace = self._get_parser(instance_or_cls).parse_intermixed_args(args=args)
         return self.cast_to_class(namespace)
 
     def parse_known_args(
-        self, instance_or_cls, args: Optional[Sequence[str]] = None
-    ) -> Tuple[DataclassParser, List[str]]:
+        self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
+    ) -> Tuple[Union[DataclassParser[DataClass], DataClass], List[str]]:
         namespace, args = self._get_parser(instance_or_cls).parse_known_args(args=args)
         return self.cast_to_class(namespace), args
 
     def parse_known_intermixed_args(
-        self, instance_or_cls, args: Optional[Sequence[str]] = None
-    ) -> Tuple[DataclassParser, List[str]]:
+        self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
+    ) -> Tuple[Union[DataclassParser[DataClass], DataClass], List[str]]:
         namespace, args = self._get_parser(instance_or_cls).parse_known_intermixed_args(args=args)
         return self.cast_to_class(namespace), args
 
 
-def make_parser(cls: dataclass, default_argument_args=None, **parser_args) -> argparse.ArgumentParser:
-    return DataclassParserMaker(cls, default_argument_args, **parser_args).main_parser
+def make_parser(
+    instance_or_cls: Union[Type[DataClass], DataClass], default_argument_args=None, **parser_args
+) -> argparse.ArgumentParser:
+    return DataclassParserMaker(instance_or_cls, default_argument_args, **parser_args).main_parser
 
 
-def parse_to(cls: dataclass, args=None, default_argument_args: dict = None, **parser_args) -> dataclass:
+def parse_to(
+    instance_or_cls: Union[Type[DataClass], DataClass], args=None, default_argument_args: dict = None, **parser_args
+) -> Union[DataclassParser[DataClass], DataClass]:
     """Parse arguments to a dataclass"""
-    parser_maker = DataclassParserMaker(cls, default_argument_args=default_argument_args, **parser_args)
-    return parser_maker.parse_args(cls, args=args)
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args=default_argument_args, **parser_args)
+    return parser_maker.parse_args(instance_or_cls, args=args)
 
 
 class ClassOrInstanceMethod:
@@ -339,20 +365,37 @@ _dataclass_parser_methods: Tuple[str] = tuple(
 )
 
 
-def _wrap_dataclass(cls: dataclass, kwargs: Dict[str, Any]) -> Type[DataclassParser]:
+def _transform_dataclass_parser(
+    cls: Type[DataClass], /, kwargs: Dict[str, Any] = None
+) -> Union[Type[DataclassParser[DataClass]], Type[DataClass]]:
+    """Decorator that adds `DataclassParser` methods to the dataclass"""
+    kwargs = kwargs or {}
     parser_maker = DataclassParserMaker(cls, **kwargs)
     for method_name in _dataclass_parser_methods:
         setattr(cls, method_name, ClassOrInstanceMethod(getattr(parser_maker, method_name)))
     return cls
 
 
-def as_parser(cls=None, /, **kwargs):
+K = TypeVar("K")
+
+
+@typing.overload
+def classparser(**kwargs) -> Callable[[Type[K]], Union[Type[DataclassParser[K]], Type[K]]]:
+    ...  # pragma: no cover
+
+
+@typing.overload
+def classparser(cls: Type[DataClass]) -> Union[Type[DataclassParser[DataClass]], Type[DataClass]]:
+    ...  # pragma: no cover
+
+
+def classparser(cls=None, /, **kwargs):
     """Decorator that adds `DataclassParser` methods to the dataclass"""
-    if cls is not None:
-        return _wrap_dataclass(cls, kwargs)
-    else:
 
-        def decorator(container_class):
-            return _wrap_dataclass(container_class, kwargs)
+    # See if we're being called as @dataclass_parser or @dataclass_parser().
+    if cls is None:
+        # We're called with parens.
+        return functools.partial(_transform_dataclass_parser, kwargs=kwargs)
 
-        return decorator
+    # We're called as @dataclass_parser without parens.
+    return _transform_dataclass_parser(cls, kwargs)

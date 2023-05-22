@@ -41,9 +41,10 @@ from pathlib import Path
 import pytest
 
 import classparse
-from classparse import DataclassParser, parse_to, make_parser
+from classparse import DataclassParser, make_parser, parse_to
 from examples.no_source import NoSourceTestClass
 from examples.one_arg import OneArgClass, OneArgNoParserClass
+from examples.simple import SimpleArgs
 from examples.usage import Action, AllOptions, Animal
 
 
@@ -91,8 +92,8 @@ def dataclass_to_args(d: dataclass, enum_value_func=value_to_str):
 
 @pytest.mark.parametrize(
     "uut",
-    [AllOptions("a"), NoSourceTestClass("a")],
-    ids=["AllOptions", "NoSourceTestClass"],
+    [AllOptions("a"), NoSourceTestClass("a"), SimpleArgs()],
+    ids=["AllOptions", "NoSourceTestClass", "SimpleArgs"],
 )
 def test_show_test_class(uut: DataclassParser):
     print()
@@ -141,7 +142,6 @@ def test_default_parameters():
 
 @pytest.mark.parametrize("enum_value_func", [value_to_str, name_to_str])
 def test_all_parameters(enum_value_func):
-    # noinspection PyTypeChecker
     expected_params = AllOptions(
         pos_arg_1="a",
         pos_arg_2=300,

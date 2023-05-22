@@ -32,7 +32,7 @@ import enum
 import functools
 import itertools
 import typing
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type, Union, Callable
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 _TYPE_RECURSION_LIMIT = 1024
 
