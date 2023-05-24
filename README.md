@@ -36,7 +36,7 @@ Declarative `ArgumentParser` definition with `dataclass` notation.
 
 # Install
 ```bash
-pip install classparse==0.1.3
+pip install classparse==0.1.4
 ```
 
 # Simple Example

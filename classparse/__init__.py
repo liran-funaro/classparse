@@ -55,7 +55,7 @@ import yaml
 from classparse import docs
 from classparse.types import _obj_to_yaml_dict, _update_field_type, _yaml_dict_to_obj
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 NO_ARG = "__no_arg__"
 POS_ARG = "__pos_arg__"
 
