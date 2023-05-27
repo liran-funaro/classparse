@@ -84,3 +84,7 @@ push = false
 "classparse/__init__.py" = [
     "^__version__ = \"{version}\"$",
 ]
+
+
+[tool.black]
+line-length = 120
