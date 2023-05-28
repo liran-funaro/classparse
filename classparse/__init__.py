@@ -58,6 +58,7 @@ from classparse.types import _obj_to_yaml_dict, _update_field_type, _yaml_dict_t
 __version__ = "0.1.4"
 NO_ARG = "__no_arg__"
 POS_ARG = "__pos_arg__"
+LOAD_DEFAULTS_FILED = "load_defaults"
 
 
 def arg(flag=None, default=None, **metadata):
@@ -95,12 +96,28 @@ def to_var_name(name: str) -> str:
     return name.replace("-", "_")
 
 
+def namespace_to_vars(namespace) -> Dict[str, Any]:
+    if not isinstance(namespace, dict):
+        namespace = vars(namespace)
+    return {to_var_name(k): v for k, v in namespace.items()}
+
+
 def _name_or_flags_arg(arg_name: str, flag: Optional[str] = None, positional: bool = False) -> Iterable[str]:
     arg_name = to_arg_name(arg_name)
     if positional:
         assert flag is None, "Flag is not supported for positional argument"
         return [arg_name]
     return filter(None, [flag, f"--{arg_name}"])
+
+
+def _add_load_defaults_arg(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        *_name_or_flags_arg(LOAD_DEFAULTS_FILED),
+        metavar="PATH",
+        type=argparse.FileType("r"),
+        default=None,
+        help="A YAML file path that overrides the default values.",
+    )
 
 
 T = TypeVar("T")
@@ -173,7 +190,13 @@ DataClass = TypeVar("DataClass")
 
 
 class DataclassParserMaker(Generic[DataClass]):
-    def __init__(self, instance_or_cls: Union[Type[DataClass], DataClass], default_argument_args=None, **parser_args):
+    def __init__(
+        self,
+        instance_or_cls: Union[Type[DataClass], DataClass],
+        default_argument_args=None,
+        load_defaults_from_file=False,
+        **parser_args,
+    ):
         if not dataclasses.is_dataclass(instance_or_cls):
             raise TypeError("Cannot operate on a non-dataclass object.")
 
@@ -182,12 +205,11 @@ class DataclassParserMaker(Generic[DataClass]):
         else:
             self.cls = type(instance_or_cls)
 
-        if default_argument_args is None:
-            default_argument_args = {}
-        self.default_argument_args = default_argument_args
+        self.default_argument_args = default_argument_args or {}
+        self.load_defaults_from_file = bool(load_defaults_from_file)
 
-        parser_args.setdefault("description", self.cls.__doc__)
         self.parser_args = parser_args
+        self.parser_args.setdefault("description", self.cls.__doc__)
 
         self.docs = docs.get_argument_docs(self.cls)
         self.args = []
@@ -242,6 +264,9 @@ class DataclassParserMaker(Generic[DataClass]):
             assert default_values is None
             default_values = {}
 
+        if self.load_defaults_from_file:
+            _add_load_defaults_arg(parser)
+
         for name, args, kwargs in self.args:
             if name in default_values:
                 kwargs = dict(kwargs, default=default_values[name])
@@ -249,11 +274,23 @@ class DataclassParserMaker(Generic[DataClass]):
 
         return parser
 
-    def namespace_to_vars(self, namespace) -> Dict[str, Any]:
-        if not isinstance(namespace, dict):
-            namespace = vars(namespace)
-        fields = ((to_var_name(k), v) for k, v in namespace.items())
-        return {k: v for k, v in fields if k in self.fields}
+    def parse_load_defaults(self, instance_or_cls, args=None):
+        if not self.load_defaults_from_file:
+            return instance_or_cls
+
+        parser = argparse.ArgumentParser(add_help=False)
+        _add_load_defaults_arg(parser)
+
+        try:
+            namespace, _ = parser.parse_known_args(args=args)
+        except Exception or SystemExit:
+            return instance_or_cls
+
+        load_defaults = getattr(namespace, LOAD_DEFAULTS_FILED, None)
+        if load_defaults is None:
+            return instance_or_cls
+
+        return self.load_yaml(instance_or_cls, load_defaults)
 
     def get_vars(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> Dict[str, Any]:
         if isinstance(instance_or_cls, type):
@@ -268,7 +305,7 @@ class DataclassParserMaker(Generic[DataClass]):
         self, instance_or_cls: Union[Type[DataClass], DataClass], namespace: Union[Any, Dict[str, Any]]
     ) -> Union[DataclassParser[DataClass], DataClass]:
         defaults = self.get_vars(instance_or_cls)
-        defaults.update(self.namespace_to_vars(namespace))
+        defaults.update({k: v for k, v in namespace_to_vars(namespace).items() if k in self.fields})
         return self.cls(**defaults)
 
     def dump_yaml(self, instance_or_cls: Union[Type[DataClass], DataClass], stream=None, **kwargs) -> str:
@@ -286,13 +323,19 @@ class DataclassParserMaker(Generic[DataClass]):
         return self.cls(**cur_vars)
 
     def _get_parser(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> argparse.ArgumentParser:
-        if isinstance(instance_or_cls, type):
+        if instance_or_cls is self.cls:
             return self.main_parser
         else:
             return self.make(instance_or_cls)
 
+    def _get_parser_with_defaults(
+        self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
+    ) -> argparse.ArgumentParser:
+        instance_or_cls = self.parse_load_defaults(instance_or_cls, args)
+        return self._get_parser(instance_or_cls)
+
     def get_parser(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> argparse.ArgumentParser:
-        return self.make(instance_or_cls if not isinstance(instance_or_cls, type) else None)
+        return self.make(instance_or_cls)
 
     def format_help(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> str:
         return self._get_parser(instance_or_cls).format_help()
@@ -309,25 +352,25 @@ class DataclassParserMaker(Generic[DataClass]):
     def parse_args(
         self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
     ) -> Union[DataclassParser[DataClass], DataClass]:
-        namespace = self._get_parser(instance_or_cls).parse_args(args=args)
+        namespace = self._get_parser_with_defaults(instance_or_cls, args).parse_args(args=args)
         return self.from_dict(instance_or_cls, namespace)
 
     def parse_intermixed_args(
         self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
     ) -> Union[DataclassParser[DataClass], DataClass]:
-        namespace = self._get_parser(instance_or_cls).parse_intermixed_args(args=args)
+        namespace = self._get_parser_with_defaults(instance_or_cls, args).parse_intermixed_args(args=args)
         return self.from_dict(instance_or_cls, namespace)
 
     def parse_known_args(
         self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
     ) -> Tuple[Union[DataclassParser[DataClass], DataClass], List[str]]:
-        namespace, args = self._get_parser(instance_or_cls).parse_known_args(args=args)
+        namespace, args = self._get_parser_with_defaults(instance_or_cls, args).parse_known_args(args=args)
         return self.from_dict(instance_or_cls, namespace), args
 
     def parse_known_intermixed_args(
         self, instance_or_cls: Union[Type[DataClass], DataClass], args: Optional[Sequence[str]] = None
     ) -> Tuple[Union[DataclassParser[DataClass], DataClass], List[str]]:
-        namespace, args = self._get_parser(instance_or_cls).parse_known_intermixed_args(args=args)
+        namespace, args = self._get_parser_with_defaults(instance_or_cls, args).parse_known_intermixed_args(args=args)
         return self.from_dict(instance_or_cls, namespace), args
 
 
@@ -375,7 +418,7 @@ K = TypeVar("K")
 
 @typing.overload
 def classparser(
-    default_argument_args=None, **parser_args
+    default_argument_args=None, load_defaults_from_file=False, **parser_args
 ) -> Callable[[Type[K]], Union[Type[DataclassParser[K]], Type[K]]]:
     ...  # pragma: no cover
 

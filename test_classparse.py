@@ -42,6 +42,7 @@ import pytest
 
 import classparse
 from classparse import DataclassParser, make_parser, parse_to
+from examples.load_defaults import SimpleLoadDefaults
 from examples.no_source import NoSourceTestClass
 from examples.one_arg import OneArgClass, OneArgNoParserClass
 from examples.simple import SimpleArgs
@@ -275,3 +276,20 @@ def test_non_dataclass():
 
     with pytest.raises(TypeError):
         parse_to(Fake)
+
+
+def test_load_defaults(tmpdir):
+    defaults = SimpleLoadDefaults(retries=10, eps=1e-10)
+    defaults_yaml = tmpdir.join("defaults.yaml")
+    with defaults_yaml.open("w") as f:
+        defaults.dump_yaml(f)
+
+    p1 = SimpleLoadDefaults.parse_args(["--load-defaults", str(defaults_yaml), "--eps", "1e-9"])
+    assert p1 == SimpleLoadDefaults(retries=10, eps=1e-9)
+
+    p2 = defaults.parse_args(["--eps", "1e-9"])
+    assert p2 == SimpleLoadDefaults(retries=10, eps=1e-9)
+
+    with pytest.raises(Exception):
+        # noinspection PyTypeChecker
+        SimpleLoadDefaults.parse_args(object())
