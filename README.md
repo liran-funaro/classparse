@@ -41,8 +41,8 @@ pip install classparse==0.1.4
 
 # Simple Example
 This is a simple example of the most basic usage of this library.
-<!-- embed: examples/simple.py -->
 
+<!-- embed: examples/simple.py -->
 ```python
 # examples/simple.py
 from dataclasses import dataclass
@@ -82,8 +82,8 @@ SimpleArgs(retries=10, eps=1e-06)
 
 # Exhaustive Usage Example
 This example demonstrates all the usage scenarios of this library.
-<!-- embed: examples/usage.py -->
 
+<!-- embed: examples/usage.py -->
 ```python
 # examples/usage.py
 import dataclasses
@@ -103,8 +103,10 @@ class Animal(Enum):
     Dog = auto()
 
 @classparser(
-    prog="my_program.py",  # Keyword arguments are passed to the parser init.
-    default_argument_args=dict(help="(type: %(type)s)"),  # Set default arguments for each call of add_argument().
+    # Keyword arguments are passed to the parser init.
+    prog="my_program.py",
+    # `default_argument_args` sets default arguments for each call of add_argument().
+    default_argument_args=dict(help="(type: %(type)s)"),
 )
 @dataclass(frozen=True)
 class AllOptions:
@@ -307,6 +309,50 @@ actions: [<Action.Initialize: 'init'>, <Action.Initialize: 'init'>, <Action.Exec
 $ python examples/usage.py int-choices --animals Cat 1 Dog 2 -r1 -s animals
 animals: [<Animal.Cat: 1>, <Animal.Cat: 1>, <Animal.Dog: 2>, <Animal.Dog: 2>]
 ```
+
+## Loading Default Values From File
+`classparse` supports loading default values from a YAML file.
+
+<!-- embed: examples/load_defaults.py -->
+```python
+# examples/load_defaults.py
+from dataclasses import dataclass
+
+from classparse import classparser
+
+@classparser(load_defaults_from_file=True)
+@dataclass
+class SimpleLoadDefaults:
+    """A simple dataclass that loads defaults from file"""
+
+    retries: int = 5  # number of retries
+    eps: float = 1e-3  # epsilon
+
+if __name__ == "__main__":
+    print(SimpleLoadDefaults.parse_args())
+```
+
+<!-- execute: python examples/load_defaults.py --help -->
+```bash
+$ python examples/load_defaults.py --help
+usage: load_defaults.py [-h] [--load-defaults PATH] [--retries RETRIES]
+                        [--eps EPS]
+
+A simple dataclass that loads defaults from file
+
+options:
+  -h, --help            show this help message and exit
+  --load-defaults PATH  A YAML file path that overrides the default values.
+  --retries RETRIES     number of retries
+  --eps EPS             epsilon
+```
+
+<!-- execute: printf "retries: 10\neps: 1e-10" | python examples/load_defaults.py --load-defaults - --eps 1e-6  -->
+```bash
+$ printf "retries: 10\neps: 1e-10" | python examples/load_defaults.py --load-defaults - --eps 1e-6
+SimpleLoadDefaults(retries=10, eps=1e-06)
+```
+* Passing `-` to `--load-defaults` will load the YAML form stdin.
 
 # Alternatives
 

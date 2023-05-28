@@ -47,8 +47,10 @@ class Animal(Enum):
 
 
 @classparser(
-    prog="my_program.py",  # Keyword arguments are passed to the parser init.
-    default_argument_args=dict(help="(type: %(type)s)"),  # Set default arguments for each call of add_argument().
+    # Keyword arguments are passed to the parser init.
+    prog="my_program.py",
+    # `default_argument_args` sets default arguments for each call of add_argument().
+    default_argument_args=dict(help="(type: %(type)s)"),
 )
 @dataclass(frozen=True)
 class AllOptions:
