@@ -316,11 +316,9 @@ class DataclassParserMaker(Generic[DataClass]):
     def load_yaml(
         self, instance_or_cls: Union[Type[DataClass], DataClass], stream
     ) -> Union[DataclassParser[DataClass], DataClass]:
-        cur_vars = self.get_vars(instance_or_cls)
         loaded_vars = yaml.safe_load(stream)
         loaded_vars = _yaml_dict_to_obj(loaded_vars, self.all_types)
-        cur_vars.update(loaded_vars)
-        return self.cls(**cur_vars)
+        return self.from_dict(instance_or_cls, loaded_vars)
 
     def _get_parser(self, instance_or_cls: Union[Type[DataClass], DataClass]) -> argparse.ArgumentParser:
         if instance_or_cls is self.cls:
