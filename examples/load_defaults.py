@@ -37,8 +37,8 @@ from classparse import classparser
 class SimpleLoadDefaults:
     """A simple dataclass that loads defaults from file"""
 
-    retries: int = 5  # number of retries
-    eps: float = 1e-3  # epsilon
+    retries: int = 5  # retries-default: %(default)s
+    eps: float = 1e-3  # eps-default: %(default)s
 
 
 if __name__ == "__main__":

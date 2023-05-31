@@ -216,6 +216,7 @@ def _update_enum(a: Argument) -> bool:
     a.args["metavar"] = "{%s}" % ",".join(map(_make_metavar, choices))
     cur_default = a.args.get("default", None)
     if isinstance(cur_default, enum.Enum):
+        # Change default to string for readability
         a.args["default"] = cur_default.name
     a.args["type"] = __make_enum_parser(a.type)
     return False
@@ -271,7 +272,7 @@ def _update_field_type_internal(a: Argument) -> bool:
     return False
 
 
-def _update_field_type(argument_args: Dict[str, Any]):
+def update_field_type(argument_args: Dict[str, Any]):
     a = Argument(argument_args)
     iter_count = itertools.count()
     # Some types are recursive, so we iterate until no special type is matched
@@ -279,11 +280,11 @@ def _update_field_type(argument_args: Dict[str, Any]):
         a.update_type()
 
 
-def _obj_to_yaml_dict(o):
+def obj_to_yaml_dict(o):
     if isinstance(o, dict):
-        return {k: _obj_to_yaml_dict(v) for k, v in o.items()}
+        return {k: obj_to_yaml_dict(v) for k, v in o.items()}
     if isinstance(o, (tuple, list)):
-        return [_obj_to_yaml_dict(v) for v in o]
+        return [obj_to_yaml_dict(v) for v in o]
     if isinstance(o, enum.Enum):
         return o.name
     if isinstance(o, (int, float, bool)) or o is None:
@@ -292,12 +293,26 @@ def _obj_to_yaml_dict(o):
         return str(o)
 
 
-def _yaml_dict_to_obj(o, value_type: Union[Callable, Dict[str, Callable]]):
+def yaml_dict_to_obj(o, value_type: Union[Callable, Dict[str, Callable]]):
     if isinstance(o, dict):
-        return {k: _yaml_dict_to_obj(v, value_type.get(k, None)) for k, v in o.items()}
+        return {k: yaml_dict_to_obj(v, value_type.get(k, None)) for k, v in o.items()}
     if isinstance(o, (tuple, list)):
-        return [_yaml_dict_to_obj(v, value_type) for v in o]
+        return [yaml_dict_to_obj(v, value_type) for v in o]
     if callable(value_type) and isinstance(o, str):
         return value_type(o)
     else:
         return o
+
+
+def _set_nested(d, k, v):
+    ks = k.split(".")
+    for kk in ks[:-1]:
+        d = d.setdefault(kk, {})
+    d[ks[-1]] = v
+
+
+def to_nested_dict(d):
+    r = {}
+    for k, v in d.items():
+        _set_nested(r, k, v)
+    return r

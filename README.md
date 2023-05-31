@@ -102,6 +102,19 @@ class Animal(Enum):
     Cat = auto()
     Dog = auto()
 
+@dataclass(frozen=True)
+class SubChild:
+    """Double nested class"""
+
+    str_arg: str = "sub-child-test"
+
+@dataclass(frozen=True)
+class Child:
+    """Nested class"""
+
+    str_arg: str = "child-test"  # (default=%(default)s)
+    child_arg: SubChild = None  # We can override the nested class description
+
 @classparser(
     # Keyword arguments are passed to the parser init.
     prog="my_program.py",
@@ -161,6 +174,8 @@ class AllOptions:
     true_bool_arg: bool = True  # We can set any default value
     false_bool_arg: bool = False
     complex_arg: complex = complex(1, -1)
+    group_arg: Child = None
+    default_child_arg: Child = Child(str_arg="override")  # We can override the nested class default values
 
     # no_arg() is used to not include this argument in the parser.
     # The first argument (optional) sets the default value.
@@ -193,8 +208,8 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--just-optional-arg JUST_OPTIONAL_ARG]
                      [--optional-choice-arg {Initialize/init,Execute/exec}]
                      [--union-arg UNION_ARG] [--path-arg PATH_ARG]
-                     [-f FLAG_ARG] -r REQUIRED_ARG [--metavar-arg M]
-                     [--int-list INT_LIST [INT_LIST ...]]
+                     [--flag-arg FLAG_ARG] --required-arg REQUIRED_ARG
+                     [--metavar-arg M] [--int-list INT_LIST [INT_LIST ...]]
                      [--int-2-list INT_2_LIST INT_2_LIST]
                      [--multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE]
                      [--actions {Initialize/init,Execute/exec} [{Initialize/init,Execute/exec} ...]]
@@ -207,7 +222,12 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--none-bool-arg | --no-none-bool-arg]
                      [--true-bool-arg | --no-true-bool-arg]
                      [--false-bool-arg | --no-false-bool-arg]
-                     [--complex-arg COMPLEX_ARG] [-s SHOW [SHOW ...]]
+                     [--complex-arg COMPLEX_ARG]
+                     [--group-arg.str-arg GROUP_ARG.STR_ARG]
+                     [--group-arg.child-arg.str-arg GROUP_ARG.CHILD_ARG.STR_ARG]
+                     [--default-child-arg.str-arg DEFAULT_CHILD_ARG.STR_ARG]
+                     [--default-child-arg.child-arg.str-arg DEFAULT_CHILD_ARG.CHILD_ARG.STR_ARG]
+                     [--show SHOW [SHOW ...]]
                      pos-arg-1 [pos-arg-2]
 
 Class doc string ==> parser description. The fields' inline/above comment ==>
@@ -248,12 +268,12 @@ options:
                         Tries to convert to type in order until first success
                         (type=typing.Union[int, float, bool])
   --path-arg PATH_ARG   (type: Path)
-  -f FLAG_ARG, --flag-arg FLAG_ARG
+  --flag-arg FLAG_ARG, -f FLAG_ARG
                         arg() is a wrapper around dataclasses.field().The
                         first argument (optional) is the short argument
                         name.The following keyword arguments can be any
                         argparse.add_argument() parameter.
-  -r REQUIRED_ARG, --required-arg REQUIRED_ARG
+  --required-arg REQUIRED_ARG, -r REQUIRED_ARG
                         E.g., required=True
   --metavar-arg M       E.g., metavar=M
   --int-list INT_LIST [INT_LIST ...]
@@ -291,11 +311,35 @@ options:
                         (type: bool) (default: False)
   --complex-arg COMPLEX_ARG
                         (type: complex)
-  -s SHOW [SHOW ...], --show SHOW [SHOW ...]
+  --show SHOW [SHOW ...], -s SHOW [SHOW ...]
                         We used this argument for the README example. Note
                         that comments above the arg are also included in the
                         help of the argument. This is a convenient way to
                         include long help messages.
+
+group-arg:
+  Nested class
+
+  --group-arg.str-arg GROUP_ARG.STR_ARG
+                        (default=child-test)
+
+child-arg:
+  We can override the nested class description
+
+  --group-arg.child-arg.str-arg GROUP_ARG.CHILD_ARG.STR_ARG
+                        (type: str)
+
+default-child-arg:
+  We can override the nested class default values
+
+  --default-child-arg.str-arg DEFAULT_CHILD_ARG.STR_ARG
+                        (default=override)
+
+child-arg:
+  We can override the nested class description
+
+  --default-child-arg.child-arg.str-arg DEFAULT_CHILD_ARG.CHILD_ARG.STR_ARG
+                        (type: str)
 ```
 
 Note that for Enums, we can use either the enum name or its value.
@@ -325,8 +369,8 @@ from classparse import classparser
 class SimpleLoadDefaults:
     """A simple dataclass that loads defaults from file"""
 
-    retries: int = 5  # number of retries
-    eps: float = 1e-3  # epsilon
+    retries: int = 5  # retries-default: %(default)s
+    eps: float = 1e-3  # eps-default: %(default)s
 
 if __name__ == "__main__":
     print(SimpleLoadDefaults.parse_args())
@@ -343,8 +387,8 @@ A simple dataclass that loads defaults from file
 options:
   -h, --help            show this help message and exit
   --load-defaults PATH  A YAML file path that overrides the default values.
-  --retries RETRIES     number of retries
-  --eps EPS             epsilon
+  --retries RETRIES     retries-default: 5
+  --eps EPS             eps-default: 0.001
 ```
 
 <!-- execute: printf "retries: 10\neps: 1e-10" | python examples/load_defaults.py --load-defaults - --eps 1e-6  -->
@@ -353,6 +397,22 @@ $ printf "retries: 10\neps: 1e-10" | python examples/load_defaults.py --load-def
 SimpleLoadDefaults(retries=10, eps=1e-06)
 ```
 * Passing `-` to `--load-defaults` will load the YAML form stdin.
+
+The help message will show the defaults after loading them from the YAML file.
+<!-- execute: printf "retries: 10\neps: 1e-10" | python examples/load_defaults.py --load-defaults - --help  -->
+```bash
+$ printf "retries: 10\neps: 1e-10" | python examples/load_defaults.py --load-defaults - --help
+usage: load_defaults.py [-h] [--load-defaults PATH] [--retries RETRIES]
+                        [--eps EPS]
+
+A simple dataclass that loads defaults from file
+
+options:
+  -h, --help            show this help message and exit
+  --load-defaults PATH  A YAML file path that overrides the default values.
+  --retries RETRIES     retries-default: 10
+  --eps EPS             eps-default: 1e-10
+```
 
 # Alternatives
 

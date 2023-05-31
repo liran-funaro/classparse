@@ -35,8 +35,8 @@ import dataclasses
 import enum
 import io
 import sys
-from dataclasses import dataclass
 from pathlib import Path
+from typing import Type, Union
 
 import pytest
 
@@ -46,7 +46,7 @@ from examples.load_defaults import SimpleLoadDefaults
 from examples.no_source import NoSourceTestClass
 from examples.one_arg import OneArgClass, OneArgNoParserClass
 from examples.simple import SimpleArgs
-from examples.usage import Action, AllOptions, Animal
+from examples.usage import Action, AllOptions, Animal, Child, SubChild
 
 
 def value_to_str(value):
@@ -67,35 +67,91 @@ def no_bool_support():
     return sys.version_info.major >= 3 and sys.version_info.minor >= 9
 
 
-def dataclass_to_args(d: dataclass, enum_value_func=value_to_str):
+def convert_tuple_to_list(d):
+    return dataclasses.replace(d, **{k: list(v) for k, v in vars(d).items() if isinstance(v, tuple)})
+
+
+def key_value_to_args(k: str, v, enum_value_func=value_to_str, prefix=""):
+    if k == "no_arg" or "pos" in k or v is None:
+        return
+    field = prefix + k.replace("_", "-")
+
+    if isinstance(v, dict) or dataclasses.is_dataclass(v):
+        yield from dataclass_to_args(v, enum_value_func=enum_value_func, prefix=f"{field}.")
+    elif isinstance(v, (list, tuple)):
+        if len(v) > 0:
+            yield f"--{field}"
+            yield from map(enum_value_func, v)
+    elif isinstance(v, bool):
+        if v:
+            yield f"--{field}"
+        elif no_bool_support():
+            yield f"--no-{field}"
+    else:
+        yield f"--{field}"
+        yield enum_value_func(v)
+
+
+def dataclass_to_args(instance_or_cls, enum_value_func=value_to_str, prefix=""):
+    if dataclasses.is_dataclass(instance_or_cls):
+        dct = dataclasses.asdict(instance_or_cls)
+    else:
+        assert isinstance(instance_or_cls, dict)
+        dct = instance_or_cls
+
     args = []
-    dct = dataclasses.asdict(d)
+
     for k, v in dct.items():
         if "pos" in k:
             args.append(enum_value_func(v))
 
     for k, v in dct.items():
-        if k == "no_arg" or "pos" in k or v is None:
-            continue
-        field = k.replace("_", "-")
-        if isinstance(v, (list, tuple)):
-            if len(v) > 0:
-                args.extend([f"--{field}", *map(enum_value_func, v)])
-        elif isinstance(v, bool):
-            if v:
-                args.append(f"--{field}")
-            elif no_bool_support():
-                args.append(f"--no-{field}")
-        else:
-            args.extend([f"--{field}", enum_value_func(v)])
+        args.extend(key_value_to_args(k, v, enum_value_func=enum_value_func, prefix=prefix))
+
     return args
 
 
-@pytest.mark.parametrize(
-    "uut",
-    [AllOptions("a"), NoSourceTestClass("a"), SimpleArgs()],
-    ids=["AllOptions", "NoSourceTestClass", "SimpleArgs"],
+AllOptionsAllSet = AllOptions(
+    pos_arg_1="a",
+    pos_arg_2=300,
+    int_arg=10,
+    str_enum_choice_arg=Action.Execute,
+    int_enum_choice_arg=Animal.Dog,
+    literal_arg="b",
+    literal_int_arg=2,
+    mixed_literal=2,
+    just_optional_arg="test-opt",
+    optional_arg=100,
+    optional_choice_arg=Action.Initialize,
+    union_arg=1e-3,
+    union_list=[500, 1e-8, "test-union", False, True],
+    flag_arg=20,
+    required_arg=1e-6,
+    int_list=[30, 40],
+    int_2_list=[5, 6],
+    multi_type_tuple=[100, 1e-10, "test"],
+    actions=[Action.Initialize, Action.Execute],
+    animals=[Animal.Cat, Animal.Dog],
+    literal_list=["bb", "bb", "aa", 22, Animal.Cat],
+    typeless_list=["a", "b"],
+    typeless_typing_list=["c", "d"],
+    none_bool_arg=True,
+    true_bool_arg=not no_bool_support(),
+    false_bool_arg=True,
+    path_arg=Path("/a/b"),
+    complex_arg=complex(-1, 2),
+    union_with_literal=["a", "b", 2, 1],
+    group_arg=Child(str_arg="abc", child_arg=SubChild(str_arg="efg")),
+    default_child_arg=Child(str_arg="def-abc", child_arg=SubChild(str_arg="def-efg")),
 )
+
+AllOptionsJustRequired = AllOptions("a", required_arg=1e-6)
+
+OPTIONS = [AllOptions, AllOptionsAllSet, AllOptionsJustRequired, NoSourceTestClass("a"), SimpleArgs()]
+IDS = ["AllOptions class", "AllOptionsAllSet", "AllOptionsJustRequired", "NoSourceTestClass", "SimpleArgs"]
+
+
+@pytest.mark.parametrize("uut", OPTIONS, ids=IDS)
 def test_show_test_class(uut: DataclassParser):
     print()
     print(uut.__class__.__name__)
@@ -103,7 +159,7 @@ def test_show_test_class(uut: DataclassParser):
         print(f"{k:>20s}: {v}")
 
 
-@pytest.mark.parametrize("uut", [AllOptions, NoSourceTestClass])
+@pytest.mark.parametrize("uut", [AllOptions, SimpleArgs, SimpleLoadDefaults, OneArgClass, NoSourceTestClass])
 def test_help(uut: DataclassParser):
     expected_in_help = uut.__doc__.strip().splitlines()[0].strip()
     expected_in_usage = "usage:"
@@ -135,6 +191,35 @@ def test_help(uut: DataclassParser):
     assert expected_in_usage in usage_str
 
 
+@pytest.mark.parametrize("uut", OPTIONS, ids=IDS)
+def test_transformers(uut: Union[DataclassParser, Type[DataclassParser]]):
+    if isinstance(uut, type):
+        try:
+            expected_params = uut()
+        except TypeError:
+            expected_params = uut(None)
+        actor = [uut, expected_params]
+    else:
+        expected_params = uut
+        actor = [type(uut), expected_params]
+
+    for act in actor:
+        dict_obj = uut.asdict()
+        p = act.from_dict(dict_obj)
+        assert expected_params == p
+
+        dict_obj = uut.get_vars()
+        p = act.from_dict(dict_obj)
+        assert expected_params == p
+
+        p = act.from_dict(expected_params)
+        assert expected_params == p
+
+        yaml_str = uut.dump_yaml()
+        p = act.load_yaml(yaml_str)
+        assert convert_tuple_to_list(expected_params) == p
+
+
 def test_default_parameters():
     expected_params = AllOptions("a", required_arg=1e-6)
     p = AllOptions.parse_args(args=["a", "--required-arg", "1e-6"])
@@ -143,37 +228,7 @@ def test_default_parameters():
 
 @pytest.mark.parametrize("enum_value_func", [value_to_str, name_to_str])
 def test_all_parameters(enum_value_func):
-    expected_params = AllOptions(
-        pos_arg_1="a",
-        pos_arg_2=300,
-        int_arg=10,
-        str_enum_choice_arg=Action.Execute,
-        int_enum_choice_arg=Animal.Dog,
-        literal_arg="b",
-        literal_int_arg=2,
-        mixed_literal=2,
-        just_optional_arg="test-opt",
-        optional_arg=100,
-        optional_choice_arg=Action.Initialize,
-        union_arg=1e-3,
-        union_list=[500, 1e-8, "test-union", False, True],
-        flag_arg=20,
-        required_arg=1e-6,
-        int_list=[30, 40],
-        int_2_list=[5, 6],
-        multi_type_tuple=[100, 1e-10, "test"],
-        actions=[Action.Initialize, Action.Execute],
-        animals=[Animal.Cat, Animal.Dog],
-        literal_list=["bb", "bb", "aa", 22, Animal.Cat],
-        typeless_list=["a", "b"],
-        typeless_typing_list=["c", "d"],
-        none_bool_arg=True,
-        true_bool_arg=not no_bool_support(),
-        false_bool_arg=True,
-        path_arg=Path("/a/b"),
-        complex_arg=complex(-1, 2),
-        union_with_literal=["a", "b", 2, 1],
-    )
+    expected_params = AllOptionsAllSet
     args = dataclass_to_args(expected_params, enum_value_func=enum_value_func)
     print()
     print(args)
@@ -184,57 +239,45 @@ def test_all_parameters(enum_value_func):
 
     expected_params2 = dataclasses.replace(p1, pos_arg_1="b", required_arg=1e-7, int_arg=1_000, show=["a", "b", "c"])
     args = ["b", "-r", "1e-7", "--int-arg", "1_000", "--show", "a", "b", "c"]
-    for func in (
-        p1.parse_args,
-        p1.parse_intermixed_args,
-        expected_params.parse_args,
-        expected_params.parse_intermixed_args,
-        expected_params2.parse_args,
-        expected_params2.parse_intermixed_args,
-    ):
-        p2 = func(args=args)
-        assert isinstance(p2, AllOptions)
-        assert expected_params2 == p2
 
     unknown_args = ["--fake-arg", "5"]
-    for func in (
-        p1.parse_known_args,
-        p1.parse_known_intermixed_args,
-        expected_params.parse_known_args,
-        expected_params.parse_known_intermixed_args,
-        expected_params2.parse_known_args,
-        expected_params2.parse_known_intermixed_args,
-    ):
-        p2, a = func(args=[*args, *unknown_args])
-        assert isinstance(p2, AllOptions)
-        assert expected_params2 == p2
-        assert a == unknown_args
+    parse_known_funcs = "parse_known_args", "parse_known_intermixed_args"
+    parse_funcs = "parse_args", "parse_intermixed_args"
+    uuts = p1, expected_params, expected_params2
+    for u in uuts:
+        for func_name in parse_funcs:
+            func = getattr(u, func_name)
+            p2 = func(args=args)
+            assert isinstance(p2, AllOptions), f"Func: {func_name}"
+            assert expected_params2 == p2, f"Func: {func_name}"
 
-    p1_parser = p1.get_parser()
-    assert isinstance(p1_parser, argparse.ArgumentParser)
-    for func in (p1_parser.parse_known_args, p1_parser.parse_known_intermixed_args):
-        # noinspection PyArgumentList
-        namespace, a = func(args=[*args, *unknown_args])
-        assert a == unknown_args
-        res_dict = {classparse.to_arg_name(k): v for k, v in vars(namespace).items()}
-        p2_dict = p2.asdict()
-        del p2_dict["no-arg"]
-        assert res_dict == p2_dict
+        for func_name in parse_known_funcs:
+            func = getattr(u, func_name)
+            p2, a = func(args=[*args, *unknown_args])
+            assert isinstance(p2, AllOptions), f"Func: {func_name}"
+            assert expected_params2 == p2, f"Func: {func_name}"
+            assert a == unknown_args, f"Func: {func_name}"
 
-    yaml_str = expected_params2.dump_yaml()
-    p2 = AllOptions.load_yaml(yaml_str)
-    assert expected_params2 == p2
+        u_parser = u.get_parser()
+        assert isinstance(u_parser, argparse.ArgumentParser)
+        for func_name in parse_funcs:
+            func = getattr(u_parser, func_name)
+            # noinspection PyArgumentList
+            namespace = func(args=args)
+            res_vars = classparse.namespace_to_vars(vars(namespace))
+            p2_vars = expected_params2.get_vars()
+            del p2_vars["no_arg"]
+            assert res_vars == p2_vars
 
-    dict_obj = expected_params2.asdict()
-    p2 = AllOptions.from_dict(dict_obj)
-    assert expected_params2 == p2
-
-    dict_obj = expected_params2.get_vars()
-    p2 = AllOptions.from_dict(dict_obj)
-    assert expected_params2 == p2
-
-    p2 = AllOptions.from_dict(expected_params2)
-    assert expected_params2 == p2
+        for func_name in parse_known_funcs:
+            func = getattr(u_parser, func_name)
+            # noinspection PyArgumentList
+            namespace, a = func(args=[*args, *unknown_args])
+            assert a == unknown_args
+            res_vars = classparse.namespace_to_vars(vars(namespace))
+            p2_vars = expected_params2.get_vars()
+            del p2_vars["no_arg"]
+            assert res_vars == p2_vars
 
 
 def test_simple_all_parameters():
@@ -243,16 +286,23 @@ def test_simple_all_parameters():
     assert expected_params == p
 
 
-def test_simple_no_decorator():
-    expected_params = OneArgNoParserClass(one_arg="test")
-    p = parse_to(OneArgNoParserClass, args=dataclass_to_args(expected_params))
+@pytest.mark.parametrize(
+    "uut",
+    [OneArgNoParserClass, OneArgNoParserClass(), OneArgNoParserClass(one_arg="test")],
+    ids=["OneArgNoParserClass class", "OneArgNoParserClass empty init", "OneArgNoParserClass with init"],
+)
+def test_simple_no_decorator(uut):
+    expected_params = OneArgNoParserClass(one_arg="exp-test")
+    args = dataclass_to_args(expected_params)
+
+    p = parse_to(uut, args=args)
     assert expected_params == p
 
-    for parser in (make_parser(OneArgNoParserClass), make_parser(OneArgNoParserClass())):
-        namespace = parser.parse_args(args=dataclass_to_args(expected_params))
-        res_dict = {k: v for k, v in vars(namespace).items()}
-        p_dict = dataclasses.asdict(expected_params)
-        assert res_dict == p_dict
+    parser = make_parser(uut)
+    namespace = parser.parse_args(args=args)
+    res_dict = {k: v for k, v in vars(namespace).items()}
+    p_dict = dataclasses.asdict(expected_params)
+    assert res_dict == p_dict
 
 
 def test_bad_union_type():
@@ -293,3 +343,39 @@ def test_load_defaults(tmpdir):
     with pytest.raises(Exception):
         # noinspection PyTypeChecker
         SimpleLoadDefaults.parse_args(object())
+
+    # Make sure we allow showing help after we load the defaults from the YAML file
+    with io.StringIO() as f:
+        with pytest.raises(SystemExit) as cm:
+            with contextlib.redirect_stdout(f):
+                SimpleLoadDefaults.parse_args(args=["--load-defaults", str(defaults_yaml), "--help"])
+        help_str = str(f.getvalue())
+
+    print()
+    print(help_str)
+    assert cm.value.code == 0
+    assert "retries-default: 10" in help_str
+    assert "eps-default: 1e-10" in help_str
+
+
+def test_dataclass_namespace():
+    c = classparse.DataclassNamespace({"a", "b"})
+    assert hasattr(c, "a")
+    assert hasattr(c, "b")
+    assert not hasattr(c, "c")
+    assert not isinstance(c.a, str)
+    assert not isinstance(c.b, str)
+
+    c.c = "c-test"
+    assert hasattr(c, "c")
+    assert c.c == "c-test"
+
+    c.b = "b-test"
+    assert hasattr(c, "b")
+    assert c.b == "b-test"
+
+    c_str = str(c)
+    print(c_str)
+    assert "c='c-test'" in c_str
+    assert "b='b-test'" in c_str
+    assert "a=" not in c_str

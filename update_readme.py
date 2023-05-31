@@ -67,9 +67,9 @@ execute_pattern = re.compile(
 @classparser
 @dataclass(frozen=True)
 class UpdateArgs:
-    verify: bool = arg("-v", False)  # Verifies the output matches
-    input: str = arg("-i", "README.md")
-    output: str = arg("-o", "stdout")
+    verify: bool = arg("-v", default=False)  # Verifies the output matches
+    input: str = arg("-i", default="README.md")
+    output: str = arg("-o", default="stdout")
 
 
 def read_file(file_path: str) -> str:

@@ -46,6 +46,21 @@ class Animal(Enum):
     Dog = auto()
 
 
+@dataclass(frozen=True)
+class SubChild:
+    """Double nested class"""
+
+    str_arg: str = "sub-child-test"
+
+
+@dataclass(frozen=True)
+class Child:
+    """Nested class"""
+
+    str_arg: str = "child-test"  # (default=%(default)s)
+    child_arg: SubChild = None  # We can override the nested class description
+
+
 @classparser(
     # Keyword arguments are passed to the parser init.
     prog="my_program.py",
@@ -105,6 +120,8 @@ class AllOptions:
     true_bool_arg: bool = True  # We can set any default value
     false_bool_arg: bool = False
     complex_arg: complex = complex(1, -1)
+    group_arg: Child = None
+    default_child_arg: Child = Child(str_arg="override")  # We can override the nested class default values
 
     # no_arg() is used to not include this argument in the parser.
     # The first argument (optional) sets the default value.
