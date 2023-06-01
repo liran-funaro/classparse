@@ -334,15 +334,28 @@ def test_load_defaults(tmpdir):
     with defaults_yaml.open("w") as f:
         defaults.dump_yaml(f)
 
+    expected_params = SimpleLoadDefaults(retries=10, eps=1e-9)
+    p0 = SimpleLoadDefaults.parse_args(["--retries", "10", "--eps", "1e-9"])
+    assert p0 == expected_params
+
     p1 = SimpleLoadDefaults.parse_args(["--load-defaults", str(defaults_yaml), "--eps", "1e-9"])
-    assert p1 == SimpleLoadDefaults(retries=10, eps=1e-9)
+    assert p1 == expected_params
 
     p2 = defaults.parse_args(["--eps", "1e-9"])
-    assert p2 == SimpleLoadDefaults(retries=10, eps=1e-9)
+    assert p2 == expected_params
 
-    with pytest.raises(Exception):
-        # noinspection PyTypeChecker
-        SimpleLoadDefaults.parse_args(object())
+    with io.StringIO() as f:
+        with pytest.raises(SystemExit) as cm:
+            with contextlib.redirect_stderr(f):
+                SimpleLoadDefaults.parse_args(["--load-defaults", "/bad/path", "--eps", "1e-9"])
+        help_str = str(f.getvalue())
+
+    print()
+    print(help_str)
+    assert cm.value.code == 2
+    assert "[--load-defaults PATH]" in help_str
+    assert "[--load-defaults PATH]" in help_str
+    assert "[--eps EPS]" in help_str
 
     # Make sure we allow showing help after we load the defaults from the YAML file
     with io.StringIO() as f:
@@ -354,6 +367,9 @@ def test_load_defaults(tmpdir):
     print()
     print(help_str)
     assert cm.value.code == 0
+    assert "[--load-defaults PATH]" in help_str
+    assert "[--load-defaults PATH]" in help_str
+    assert "[--eps EPS]" in help_str
     assert "retries-default: 10" in help_str
     assert "eps-default: 1e-10" in help_str
 

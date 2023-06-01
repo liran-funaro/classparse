@@ -168,9 +168,9 @@ class Argument:
         self.type_args: tuple = typing.get_args(self.type)
 
 
-def _update_optional(a: Argument) -> bool:
-    """Optional annotation without a type"""
-    del a.args["type"]
+def _update_any(a: Argument) -> bool:
+    """Any/Optional annotation without a type"""
+    a.args.pop("type", None)
     return False
 
 
@@ -251,8 +251,8 @@ def _update_bool(a: Argument) -> bool:
 
 def _update_field_type_internal(a: Argument) -> bool:
     """Return `True` if the type was reassigned, and it requires to inspect it again"""
-    if a.type is Optional:
-        return _update_optional(a)
+    if a.type in [Any, Optional, object, ..., "typing.Any", "", None]:
+        return _update_any(a)
 
     if a.type_origin is Union:
         return _update_union(a)
@@ -302,17 +302,3 @@ def yaml_dict_to_obj(o, value_type: Union[Callable, Dict[str, Callable]]):
         return value_type(o)
     else:
         return o
-
-
-def _set_nested(d, k, v):
-    ks = k.split(".")
-    for kk in ks[:-1]:
-        d = d.setdefault(kk, {})
-    d[ks[-1]] = v
-
-
-def to_nested_dict(d):
-    r = {}
-    for k, v in d.items():
-        _set_nested(r, k, v)
-    return r
