@@ -52,7 +52,10 @@ dependencies = ["PyYAML"]
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
-dev = ["bumpver", "black", "isort", "flake8", "pip-tools", "pytest", "pytest-cov", "coveralls"]
+dev = [
+    "bumpver", "black", "isort", "flake8", "pylint", "mypy", "types-PyYAML",
+    "pip-tools", "pytest", "pytest-cov", "coveralls"
+]
 
 [project.urls]
 Homepage = "https://github.com/liran-funaro/classparse"
@@ -88,3 +91,6 @@ push = false
 
 [tool.black]
 line-length = 120
+
+[tool.pylint.format]
+max-line-length = 120

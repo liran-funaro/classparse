@@ -41,7 +41,9 @@ from typing import Type, Union
 import pytest
 
 import classparse
+import classparse.analyze
 from classparse import DataclassParser, make_parser, parse_to
+from classparse.transform import DataclassNamespace
 from examples.load_defaults import SimpleLoadDefaults
 from examples.no_source import NoSourceTestClass
 from examples.one_arg import OneArgClass, OneArgNoParserClass
@@ -264,7 +266,7 @@ def test_all_parameters(enum_value_func):
             func = getattr(u_parser, func_name)
             # noinspection PyArgumentList
             namespace = func(args=args)
-            res_vars = classparse.namespace_to_vars(vars(namespace))
+            res_vars = classparse.analyze.namespace_to_vars(vars(namespace))
             p2_vars = expected_params2.get_vars()
             del p2_vars["no_arg"]
             assert res_vars == p2_vars
@@ -274,7 +276,7 @@ def test_all_parameters(enum_value_func):
             # noinspection PyArgumentList
             namespace, a = func(args=[*args, *unknown_args])
             assert a == unknown_args
-            res_vars = classparse.namespace_to_vars(vars(namespace))
+            res_vars = classparse.analyze.namespace_to_vars(vars(namespace))
             p2_vars = expected_params2.get_vars()
             del p2_vars["no_arg"]
             assert res_vars == p2_vars
@@ -375,7 +377,7 @@ def test_load_defaults(tmpdir):
 
 
 def test_dataclass_namespace():
-    c = classparse.DataclassNamespace({"a", "b"})
+    c = DataclassNamespace({"a", "b"})
     assert hasattr(c, "a")
     assert hasattr(c, "b")
     assert not hasattr(c, "c")
@@ -395,3 +397,15 @@ def test_dataclass_namespace():
     assert "c='c-test'" in c_str
     assert "b='b-test'" in c_str
     assert "a=" not in c_str
+
+    assert "a" in c
+    assert "b" in c
+    assert "c" in c
+
+    c1 = DataclassNamespace({"a", "b"})
+    assert c != c1
+    c1.b = "b-test"
+    c1.c = "c-test"
+    assert c == c1
+
+    assert c != "string"

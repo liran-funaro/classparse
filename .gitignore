@@ -112,3 +112,4 @@ htmlReport
 test_workflow.sh
 release.sh
 test_try/*
+Dockerfile

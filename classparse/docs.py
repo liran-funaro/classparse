@@ -27,7 +27,6 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 """
-import dataclasses
 import inspect
 import io
 import tokenize
@@ -35,18 +34,21 @@ import typing
 
 
 def _tokenize_fields(
-    container_class: dataclasses.dataclass,
+    container_class: type,
 ) -> typing.List[typing.List[tokenize.TokenInfo]]:
-    lines = [[]]
+    lines: typing.List[typing.List[tokenize.TokenInfo]] = [[]]
     # noinspection PyBroadException
+    # pylint: disable=broad-exception-caught
+    # Failing to fetch the source code should never block user.
+    # So we want to catch any unexpected exception here.
     try:
         source = inspect.getsource(container_class)
-        with io.StringIO(source) as f:
-            for t in tokenize.generate_tokens(f.readline):
-                if t.type == tokenize.NEWLINE:
+        with io.StringIO(source) as source_io:
+            for tok in tokenize.generate_tokens(source_io.readline):
+                if tok.type == tokenize.NEWLINE:
                     lines.append([])
                 else:
-                    lines[-1].append(t)
+                    lines[-1].append(tok)
     except Exception:
         pass
 
@@ -54,22 +56,23 @@ def _tokenize_fields(
 
 
 def _iter_valid_tok(line):
-    for t in line:
-        if t.type not in [tokenize.COMMENT, tokenize.NL, tokenize.INDENT]:
-            yield t
+    for tok in line:
+        if tok.type not in [tokenize.COMMENT, tokenize.NL, tokenize.INDENT]:
+            yield tok
 
 
 def _iter_comment_tok(line):
-    for t in line:
-        if t.type != tokenize.COMMENT:
+    for tok in line:
+        if tok.type != tokenize.COMMENT:
             continue
-        c = t.string
-        if c.startswith("#"):
-            c = c[1:]
-        yield c.strip()
+        comment = tok.string
+        if comment.startswith("#"):
+            comment = comment[1:]
+        yield comment.strip()
 
 
-def get_argument_docs(container_class: dataclasses.dataclass) -> typing.Dict[str, str]:
+def get_argument_docs(container_class: type) -> typing.Dict[str, str]:
+    """Returns the comments of all the fields of the dataclass"""
     lines = _tokenize_fields(container_class)
 
     docs = {}

@@ -92,7 +92,8 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, Union
 
-from classparse import arg, classparser, no_arg, pos_arg, to_arg_name, to_var_name
+from classparse import arg, classparser, no_arg, pos_arg
+from classparse.analyze import to_arg_name, to_var_name
 
 class Action(Enum):
     Initialize = "init"
