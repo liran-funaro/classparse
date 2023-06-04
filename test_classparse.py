@@ -42,7 +42,6 @@ import pytest
 
 import classparse
 import classparse.analyze
-from classparse import get_parser, parse_args
 from classparse.proto import DataclassParser
 from classparse.transform import DataclassNamespace
 from examples.load_defaults import SimpleLoadDefaults
@@ -451,21 +450,37 @@ def test_simple_all_parameters():
 
 @pytest.mark.parametrize(
     "uut",
-    [OneArgNoParserClass, OneArgNoParserClass(), OneArgNoParserClass(one_arg="test")],
+    [OneArgNoParserClass, OneArgNoParserClass(), OneArgNoParserClass(one_arg="new-test")],
     ids=["OneArgNoParserClass class", "OneArgNoParserClass empty init", "OneArgNoParserClass with init"],
 )
 def test_simple_no_decorator(uut):
+    assert classparse.get_vars(uut) == {"one_arg": uut.one_arg}
+    assert classparse.asdict(uut) == {"one-arg": uut.one_arg}
+    assert classparse.from_dict(uut, {"one-arg": "from-dict"}) == OneArgNoParserClass(one_arg="from-dict")
+    assert classparse.dump_yaml(uut).strip() == f"one_arg: {uut.one_arg}"
+    assert classparse.load_yaml(uut, "one_arg: load-yaml") == OneArgNoParserClass(one_arg="load-yaml")
+
+    with io.StringIO() as f:
+        classparse.print_help(uut, file=f)
+        usage_str = str(f.getvalue())
+    assert usage_str == classparse.format_help(uut)
+
+    with io.StringIO() as f:
+        classparse.print_usage(uut, file=f)
+        usage_str = str(f.getvalue())
+    assert usage_str == classparse.format_usage(uut)
+
     expected_params = OneArgNoParserClass(one_arg="exp-test")
     args = dataclass_to_args(expected_params)
+    assert classparse.parse_args(uut, args=args) == expected_params
+    assert classparse.parse_intermixed_args(uut, args=args) == expected_params
+    assert classparse.parse_known_args(uut, args=[*args, "fake"]) == (expected_params, ["fake"])
+    assert classparse.parse_known_intermixed_args(uut, args=[*args, "fake"]) == (expected_params, ["fake"])
 
-    p = parse_args(uut, args=args)
-    assert expected_params == p
-
-    parser = get_parser(uut)
+    parser = classparse.get_parser(uut)
+    assert isinstance(parser, argparse.ArgumentParser)
     namespace = parser.parse_args(args=args)
-    res_dict = {k: v for k, v in vars(namespace).items()}
-    p_dict = dataclasses.asdict(expected_params)
-    assert res_dict == p_dict
+    assert vars(namespace) == dataclasses.asdict(expected_params)
 
 
 def test_bad_union_type():
@@ -488,7 +503,7 @@ def test_non_dataclass():
         pass
 
     with pytest.raises(TypeError):
-        parse_args(Fake)
+        classparse.parse_args(Fake)
 
 
 def test_load_defaults(tmpdir):
