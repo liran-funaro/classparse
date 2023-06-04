@@ -33,10 +33,10 @@ import argparse
 import dataclasses
 import functools
 import sys
-from typing import Callable, Optional, Sequence, Type, TypeVar, Union, overload
+from typing import Any, Callable, Dict, Optional, Sequence, Type, TypeVar, Union, overload
 
-from classparse.analyze import NO_ARG, POS_ARG, NAME_OR_FLAG
-from classparse.proto import DataclassParser, DataclassParserType
+from classparse.analyze import NAME_OR_FLAG, NO_ARG, POS_ARG
+from classparse.proto import DataclassParserType
 from classparse.transform import DataclassParserMaker, _transform_dataclass_parser
 
 __version__ = "0.1.4"
@@ -147,21 +147,28 @@ InstanceOrClass = Union[Type[_T], _T]
 DataClass = TypeVar("DataClass", bound=object)
 
 
-def make_parser(
-    instance_or_cls: InstanceOrClass[DataClass], default_argument_args: Optional[dict] = None, **parser_args
+def get_parser(
+    instance_or_cls: InstanceOrClass[DataClass],
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
 ) -> argparse.ArgumentParser:
-    """Make an ArgumentParser from a dataclass"""
-    return DataclassParserMaker(instance_or_cls, default_argument_args, **parser_args).main_parser
+    """See `DataclassParser.get_parser()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.main_parser
 
 
-def parse_to(
+def parse_args(
     instance_or_cls: InstanceOrClass[DataClass],
     args: Optional[Sequence[str]] = None,
-    default_argument_args: Optional[dict] = None,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
     **parser_args,
-) -> DataclassParser[DataClass]:
-    """Parse arguments to a dataclass"""
-    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args=default_argument_args, **parser_args)
+) -> DataClass:
+    """See `DataclassParser.parse_args()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
     return parser_maker.parse_args(instance_or_cls, args=args)
 
 

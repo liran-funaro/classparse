@@ -42,7 +42,8 @@ import pytest
 
 import classparse
 import classparse.analyze
-from classparse import DataclassParser, make_parser, parse_to
+from classparse import get_parser, parse_args
+from classparse.proto import DataclassParser
 from classparse.transform import DataclassNamespace
 from examples.load_defaults import SimpleLoadDefaults
 from examples.no_source import NoSourceTestClass
@@ -457,10 +458,10 @@ def test_simple_no_decorator(uut):
     expected_params = OneArgNoParserClass(one_arg="exp-test")
     args = dataclass_to_args(expected_params)
 
-    p = parse_to(uut, args=args)
+    p = parse_args(uut, args=args)
     assert expected_params == p
 
-    parser = make_parser(uut)
+    parser = get_parser(uut)
     namespace = parser.parse_args(args=args)
     res_dict = {k: v for k, v in vars(namespace).items()}
     p_dict = dataclasses.asdict(expected_params)
@@ -487,7 +488,7 @@ def test_non_dataclass():
         pass
 
     with pytest.raises(TypeError):
-        parse_to(Fake)
+        parse_args(Fake)
 
 
 def test_load_defaults(tmpdir):
