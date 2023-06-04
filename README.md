@@ -90,7 +90,7 @@ import dataclasses
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union, Any
 
 from classparse import arg, classparser, no_arg, pos_arg
 from classparse.analyze import to_arg_name, to_var_name
@@ -146,7 +146,8 @@ class AllOptions:
     literal_int_arg: Literal[1, 2, 3] = None  # Literal's type is automatically inferred (type=%(type)s)
     mixed_literal: Literal[1, 2, "3", "4", True, Animal.Cat] = None  # We can mix multiple literal types (type=%(type)s)
     optional_arg: Optional[int] = None  # Optional can be used for type hinting (type=%(type)s)
-    just_optional_arg: Optional = None  # Bare optional also works (type=%(type)s)
+    just_optional_arg: Optional = None  # Bare optional also works, although it is uninformative (type=%(type)s)
+    any_optional_arg: Optional[Any] = None  # This is also uninformative (type=%(type)s)
     optional_choice_arg: Optional[Action] = None  # Nested types are supported (type=%(type)s)
     union_arg: Union[int, float, bool] = None  # Tries to convert to type in order until first success (type=%(type)s)
     path_arg: Path = None
@@ -210,6 +211,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--mixed-literal {1,2,3,4,True,Cat/1}]
                      [--optional-arg OPTIONAL_ARG]
                      [--just-optional-arg JUST_OPTIONAL_ARG]
+                     [--any-optional-arg ANY_OPTIONAL_ARG]
                      [--optional-choice-arg {Initialize/init,Execute/exec}]
                      [--union-arg UNION_ARG] [--path-arg PATH_ARG]
                      [--flag-arg FLAG_ARG] --required-arg REQUIRED_ARG
@@ -267,7 +269,10 @@ options:
   --optional-arg OPTIONAL_ARG
                         Optional can be used for type hinting (type=int)
   --just-optional-arg JUST_OPTIONAL_ARG
-                        Bare optional also works (type=None)
+                        Bare optional also works, although it is uninformative
+                        (type=None)
+  --any-optional-arg ANY_OPTIONAL_ARG
+                        This is also uninformative (type=None)
   --optional-choice-arg {Initialize/init,Execute/exec}
                         Nested types are supported (type=Action)
   --union-arg UNION_ARG

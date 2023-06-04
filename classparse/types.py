@@ -37,6 +37,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Un
 _TYPE_RECURSION_LIMIT = 1024
 _TRUE_STRINGS = {"t", "true", "y", "yes"}
 _FALSE_STRINGS = {"f", "false", "n", "no"}
+_CONTAINER_TYPES = list, tuple, set
 
 
 @functools.wraps(bool)
@@ -107,11 +108,15 @@ def _is_type(type_obj, parent_type_obj) -> bool:
 
 
 def _is_any_type(type_obj) -> bool:
-    return type_obj in [Any, Optional, object, ..., "typing.Any", "", None]
+    return type_obj in [Any, Optional, object, ..., "typing.Any", "Any", "", None, type(None)]
+
+
+def _is_non_specific_type(type_obj) -> bool:
+    return _is_any_type(type_obj) or _is_type(type_obj, type(None))
 
 
 def _is_container_type(type_obj) -> bool:
-    return type_obj in (list, tuple, set)
+    return type_obj in _CONTAINER_TYPES or typing.get_origin(type_obj) in _CONTAINER_TYPES
 
 
 def _is_enum_type(type_obj) -> bool:
@@ -126,8 +131,8 @@ def _is_str_type(type_obj) -> bool:
     return _is_type(type_obj, str)
 
 
-def _is_none_type(type_obj) -> bool:
-    return type_obj is None or _is_type(type_obj, type(None))
+def _is_union_type(type_obj) -> bool:
+    return typing.get_origin(type_obj) is Union
 
 
 def _is_literal_type(type_obj) -> bool:
@@ -180,24 +185,25 @@ def _make_metavar_string(choices: List) -> str:
 
 
 class _Argument:
-    args: Dict[str, Any]
-    update_count: int
-    type: Optional[Type]
-    type_origin: Optional[Type]
-    type_args: Tuple[Type[Any], ...]
-    have_nested_type: bool
-
     def __init__(self, argument_args: Dict[str, Any]):
         self.args = argument_args
         self.update_count = 0
+        self.have_nested_type = True
 
-    def update_type(self):
-        """Update the type information"""
-        self.type = self.args.get("type", None)
-        self.type_origin = typing.get_origin(self.type)
-        self.type_args = typing.get_args(self.type)
-        self.have_nested_type = False
-        self.update_count += 1
+    @property
+    def type(self) -> Optional[Type]:
+        """Returns the type of the argument"""
+        return self.args.get("type", None)
+
+    @property
+    def type_origin(self) -> Optional[Type]:
+        """Returns the type origin of the argument"""
+        return typing.get_origin(self.type)
+
+    @property
+    def type_args(self) -> Tuple[Type[Any], ...]:
+        """Returns the type args of the argument"""
+        return typing.get_args(self.type)
 
     def update_any(self):
         """Any/Optional annotation without a type"""
@@ -205,13 +211,15 @@ class _Argument:
 
     def update_union(self):
         """Optional annotation with a type (interpreted as a Union), Union"""
-        arg_set = [t for t in self.type_args if not _is_none_type(t)]
+        arg_set = [t for t in self.type_args if not _is_non_specific_type(t)]
         if len(arg_set) > 1:
             self.args["type"] = _wrap_union(self.type, arg_set)
-        else:
-            # For union of one type (other than None), we support further inspection of the type
-            self.args["type"] = self.type_args[0]
+        elif len(arg_set) == 1:
+            # For union of one specific type, we support further inspection of the type
+            self.args["type"] = arg_set[0]
             self.have_nested_type = True
+        else:
+            self.update_any()
 
     def update_nargs(self):
         """
@@ -221,7 +229,7 @@ class _Argument:
         type_args = tuple(self.type_args)
         n_args: Union[int, str] = "+"
         if self.type_origin is tuple and len(type_args) > 0:
-            if self.type_args[-1] == Ellipsis:
+            if type_args[-1] == Ellipsis:
                 # Tuple[T, ...] ==> List/Set[T] ==> nargs="+"
                 type_args = type_args[:-1]
             else:
@@ -238,22 +246,23 @@ class _Argument:
 
     def update_enum(self):
         """Enum type is used to define a typed choice argument"""
-        assert self.type is not None
-        assert issubclass(self.type, enum.Enum)
-        choices = list(self.type)
+        enum_type = self.type
+        assert enum_type is not None
+        assert issubclass(enum_type, enum.Enum)
+        choices = list(enum_type)
         self.args["choices"] = choices
         self.args["metavar"] = _make_metavar_string(choices)
         cur_default = self.args.get("default", None)
         if isinstance(cur_default, enum.Enum):
             # Change default to string for readability
             self.args["default"] = cur_default.name
-        self.args["type"] = _make_enum_parser(self.type)
+        self.args["type"] = _make_enum_parser(enum_type)
 
     def update_literal(self):
         """Literal type is used to define an untyped choice argument"""
         choices = list(self.type_args)
         assert len(choices) > 0, "'Literal' must have at least one parameter."
-        choices_types = set(map(type, self.type_args))
+        choices_types = set(map(type, choices))
 
         self.args["choices"] = choices
         self.args["metavar"] = _make_metavar_string(choices)
@@ -272,14 +281,19 @@ class _Argument:
             self.args["action"] = "store_true"
             del self.args["type"]
 
-    def _update_field_type_internal(self):
-        self.update_type()
+    def require_update(self) -> bool:
+        """Return `True` if the type was (re)assigned, and it requires to inspect it again"""
+        return self.have_nested_type and self.update_count < _TYPE_RECURSION_LIMIT
+
+    def update_field_type(self):
+        """Updates the field type"""
+        self.have_nested_type = False
 
         if _is_any_type(self.type):
             self.update_any()
-        elif self.type_origin is Union:
+        elif _is_union_type(self.type):
             self.update_union()
-        elif _is_container_type(self.type) or _is_container_type(self.type_origin):
+        elif _is_container_type(self.type):
             self.update_nargs()
         elif _is_enum_type(self.type):
             self.update_enum()
@@ -288,10 +302,7 @@ class _Argument:
         elif _is_bool_type(self.type):
             self.update_bool()
 
-    def update_field_type(self) -> bool:
-        """Return `True` if the type was reassigned, and it requires to inspect it again"""
-        self._update_field_type_internal()
-        return self.have_nested_type and self.update_count < _TYPE_RECURSION_LIMIT
+        self.update_count += 1
 
 
 def update_field_type(argument_args: Dict[str, Any]):
@@ -299,10 +310,9 @@ def update_field_type(argument_args: Dict[str, Any]):
     arg = _Argument(argument_args)
 
     # Some types are recursive, so we iterate until no update is needed
-    while arg.update_field_type():
-        pass
+    while arg.require_update():
+        arg.update_field_type()
 
-    arg.update_type()
     return arg.type
 
 

@@ -164,6 +164,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--mixed-literal {1,2,3,4,True,Cat/1}]
                      [--optional-arg OPTIONAL_ARG]
                      [--just-optional-arg JUST_OPTIONAL_ARG]
+                     [--any-optional-arg ANY_OPTIONAL_ARG]
                      [--optional-choice-arg {Initialize/init,Execute/exec}]
                      [--union-arg UNION_ARG] [--path-arg PATH_ARG]
                      [--flag-arg FLAG_ARG] --required-arg REQUIRED_ARG
@@ -221,7 +222,10 @@ options:
   --optional-arg OPTIONAL_ARG
                         Optional can be used for type hinting (type=int)
   --just-optional-arg JUST_OPTIONAL_ARG
-                        Bare optional also works (type=None)
+                        Bare optional also works, although it is uninformative
+                        (type=None)
+  --any-optional-arg ANY_OPTIONAL_ARG
+                        This is also uninformative (type=None)
   --optional-choice-arg {Initialize/init,Execute/exec}
                         Nested types are supported (type=Action)
   --union-arg UNION_ARG
