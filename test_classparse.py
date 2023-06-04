@@ -131,6 +131,7 @@ AllOptionsAllSet = AllOptions(
     required_arg=1e-6,
     int_list=[30, 40],
     int_2_list=[5, 6],
+    int_tuple=[8, 9, 10, 11],
     multi_type_tuple=[100, 1e-10, "test"],
     actions=[Action.Initialize, Action.Execute],
     animals=[Animal.Cat, Animal.Dog],
@@ -168,6 +169,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--flag-arg FLAG_ARG] --required-arg REQUIRED_ARG
                      [--metavar-arg M] [--int-list INT_LIST [INT_LIST ...]]
                      [--int-2-list INT_2_LIST INT_2_LIST]
+                     [--int-tuple INT_TUPLE [INT_TUPLE ...]]
                      [--multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE]
                      [--actions {Initialize/init,Execute/exec} [{Initialize/init,Execute/exec} ...]]
                      [--animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]]
@@ -235,10 +237,12 @@ options:
                         E.g., required=True
   --metavar-arg M       E.g., metavar=M
   --int-list INT_LIST [INT_LIST ...]
-                        List type hint ==> nargs="+" (type=int)
+                        List[T] ==> nargs="+" (type=int)
   --int-2-list INT_2_LIST INT_2_LIST
-                        Tuple type hint ==> nargs=<tuple length> (nargs=2,
+                        Tuple[T1, T2, Tn] ==> nargs=<tuple length> (nargs=2,
                         type=int)
+  --int-tuple INT_TUPLE [INT_TUPLE ...]
+                        Tuple[T, ...] ==> nargs="+" (nargs=+, type=int)
   --multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE
                         We can use multiple types (type=typing.Union[int,
                         float, str])
@@ -261,8 +265,7 @@ options:
   --typeless-typing-list TYPELESS_TYPING_LIST [TYPELESS_TYPING_LIST ...]
                         typing.List or list are supported
   --none-bool-arg, --no-none-bool-arg
-                        boolean args ==> argparse.BooleanOptionalAction
-                        (type=bool)
+                        bool ==> argparse.BooleanOptionalAction (type=bool)
   --true-bool-arg, --no-true-bool-arg
                         We can set any default value (default: True)
   --false-bool-arg, --no-false-bool-arg
@@ -278,7 +281,7 @@ options:
                         include long help messages.
 
 group-arg:
-  Nested class
+  Many nesting levels are supported
 
   --group-arg.str-arg GROUP_ARG.STR_ARG
                         (default=child-test)

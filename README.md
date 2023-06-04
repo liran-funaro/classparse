@@ -111,7 +111,7 @@ class SubChild:
 
 @dataclass(frozen=True)
 class Child:
-    """Nested class"""
+    """Many nesting levels are supported"""
 
     str_arg: str = "child-test"  # (default=%(default)s)
     child_arg: SubChild = None  # We can override the nested class description
@@ -161,8 +161,9 @@ class AllOptions:
     )
     required_arg: float = arg("-r", required=True)  # E.g., required=%(required)s
     metavar_arg: str = arg(metavar="M")  # E.g., metavar=%(metavar)s
-    int_list: List[int] = (1,)  # List type hint ==> nargs="+" (type=%(type)s)
-    int_2_list: Tuple[int, int] = (1, 2)  # Tuple type hint ==> nargs=<tuple length> (nargs=%(nargs)s, type=%(type)s)
+    int_list: List[int] = (1,)  # List[T] ==> nargs="+" (type=%(type)s)
+    int_2_list: Tuple[int, int] = (1, 2)  # Tuple[T1, T2, Tn] ==> nargs=<tuple length> (nargs=%(nargs)s, type=%(type)s)
+    int_tuple: Tuple[int, ...] = (1, 2, 3)  # Tuple[T, ...] ==> nargs="+" (nargs=%(nargs)s, type=%(type)s)
     multi_type_tuple: Tuple[int, float, str] = (1, 1e-3, "a")  # We can use multiple types (type=%(type)s)
     actions: List[Action] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
     animals: List[Animal] = ()  # List[Enum] ==> choices with nargs="+" (nargs=%(nargs)s, type=%(type)s)
@@ -171,7 +172,7 @@ class AllOptions:
     union_with_literal: List[Union[Literal["a", "b", 1, 2], float, bool]] = ()
     typeless_list: list = ()  # If list type is unspecified, then it uses argparse default (type=%(type)s)
     typeless_typing_list: List = ()  # typing.List or list are supported
-    none_bool_arg: bool = None  # boolean args ==> argparse.BooleanOptionalAction (type=%(type)s)
+    none_bool_arg: bool = None  # bool ==> argparse.BooleanOptionalAction (type=%(type)s)
     true_bool_arg: bool = True  # We can set any default value
     false_bool_arg: bool = False
     complex_arg: complex = complex(1, -1)
@@ -214,6 +215,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--flag-arg FLAG_ARG] --required-arg REQUIRED_ARG
                      [--metavar-arg M] [--int-list INT_LIST [INT_LIST ...]]
                      [--int-2-list INT_2_LIST INT_2_LIST]
+                     [--int-tuple INT_TUPLE [INT_TUPLE ...]]
                      [--multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE]
                      [--actions {Initialize/init,Execute/exec} [{Initialize/init,Execute/exec} ...]]
                      [--animals {Cat/1,Dog/2} [{Cat/1,Dog/2} ...]]
@@ -281,10 +283,12 @@ options:
                         E.g., required=True
   --metavar-arg M       E.g., metavar=M
   --int-list INT_LIST [INT_LIST ...]
-                        List type hint ==> nargs="+" (type=int)
+                        List[T] ==> nargs="+" (type=int)
   --int-2-list INT_2_LIST INT_2_LIST
-                        Tuple type hint ==> nargs=<tuple length> (nargs=2,
+                        Tuple[T1, T2, Tn] ==> nargs=<tuple length> (nargs=2,
                         type=int)
+  --int-tuple INT_TUPLE [INT_TUPLE ...]
+                        Tuple[T, ...] ==> nargs="+" (nargs=+, type=int)
   --multi-type-tuple MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE MULTI_TYPE_TUPLE
                         We can use multiple types (type=typing.Union[int,
                         float, str])
@@ -307,8 +311,7 @@ options:
   --typeless-typing-list TYPELESS_TYPING_LIST [TYPELESS_TYPING_LIST ...]
                         typing.List or list are supported
   --none-bool-arg, --no-none-bool-arg
-                        boolean args ==> argparse.BooleanOptionalAction
-                        (type=bool)
+                        bool ==> argparse.BooleanOptionalAction (type=bool)
   --true-bool-arg, --no-true-bool-arg
                         We can set any default value (default: True)
   --false-bool-arg, --no-false-bool-arg
@@ -324,7 +327,7 @@ options:
                         include long help messages.
 
 group-arg:
-  Nested class
+  Many nesting levels are supported
 
   --group-arg.str-arg GROUP_ARG.STR_ARG
                         (default=child-test)

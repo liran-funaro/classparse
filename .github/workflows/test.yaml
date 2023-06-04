@@ -23,7 +23,8 @@ jobs:
           pip install .[dev]
       - name: Validate coding conventions
         run: |
-          black --check --diff .
+          black classparse --check --diff
+          black ./*.py --check --diff
       - name: Lint with flake8
         run: |
           flake8 classparse --count --select=E,F,W,C --show-source --max-complexity=10 --max-line-length=120 --statistics

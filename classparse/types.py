@@ -218,10 +218,20 @@ class _Argument:
         List/Tuple/Set type/annotation is used to define a repeated argument.
         Tuple annotation is used to define a fixed length repeated argument
         """
-        self.args.setdefault("nargs", len(self.type_args) if self.type_origin is tuple else "+")
+        type_args = tuple(self.type_args)
+        n_args: Union[int, str] = "+"
+        if self.type_origin is tuple and len(type_args) > 0:
+            if self.type_args[-1] == Ellipsis:
+                # Tuple[T, ...] ==> List/Set[T] ==> nargs="+"
+                type_args = type_args[:-1]
+            else:
+                # Tuple[T1, T2, Tn] ==> nargs=n
+                n_args = len(type_args)
 
-        if len(self.type_args) > 0:
-            self.args["type"] = Union[tuple(self.type_args)]
+        self.args.setdefault("nargs", n_args)
+
+        if len(type_args) > 0:
+            self.args["type"] = Union[type_args]
             self.have_nested_type = True
         else:
             self.update_any()
