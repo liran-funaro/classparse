@@ -33,7 +33,7 @@ import argparse
 import dataclasses
 import functools
 import sys
-from typing import Any, Callable, Dict, Optional, Sequence, Type, TypeVar, Union, overload
+from typing import Any, Callable, Dict, Optional, Sequence, Type, TypeVar, Union, overload, Tuple, List
 
 from classparse.analyze import NAME_OR_FLAG, NO_ARG, POS_ARG
 from classparse.proto import DataclassParserType
@@ -147,6 +147,62 @@ InstanceOrClass = Union[Type[_T], _T]
 DataClass = TypeVar("DataClass", bound=object)
 
 
+def get_vars(
+    instance_or_cls: InstanceOrClass[DataClass],
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> Dict[str, Any]:
+    """See `DataclassParser.get_vars()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.get_vars(instance_or_cls)
+
+
+def asdict(
+    instance_or_cls: InstanceOrClass[DataClass],
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> Dict[str, Any]:
+    """See `DataclassParser.asdict()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.asdict(instance_or_cls)
+
+
+def from_dict(
+    instance_or_cls: InstanceOrClass[DataClass],
+    namespace: Any,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> DataClass:
+    """See `DataclassParser.from_dict()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.from_dict(instance_or_cls, namespace)
+
+
+def dump_yaml(instance_or_cls: InstanceOrClass[DataClass], stream=None, sort_keys=False, **kwargs) -> Optional[str]:
+    """See `DataclassParser.dump_yaml()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls)
+    return parser_maker.dump_yaml(instance_or_cls, stream, sort_keys, **kwargs)
+
+
+def load_yaml(
+    instance_or_cls: InstanceOrClass[DataClass],
+    stream,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> DataClass:
+    """See `DataclassParser.load_yaml()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.load_yaml(instance_or_cls, stream)
+
+
 def get_parser(
     instance_or_cls: InstanceOrClass[DataClass],
     *,
@@ -156,7 +212,57 @@ def get_parser(
 ) -> argparse.ArgumentParser:
     """See `DataclassParser.get_parser()`"""
     parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
-    return parser_maker.main_parser
+    return parser_maker.get_parser(instance_or_cls)
+
+
+def format_help(
+    instance_or_cls: InstanceOrClass[DataClass],
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> str:
+    """See `DataclassParser.format_help()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.format_help(instance_or_cls)
+
+
+def format_usage(
+    instance_or_cls: InstanceOrClass[DataClass],
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> str:
+    """See `DataclassParser.format_usage()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.format_usage(instance_or_cls)
+
+
+def print_help(
+    instance_or_cls: InstanceOrClass[DataClass],
+    file=None,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+):
+    """See `DataclassParser.print_help()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.print_help(instance_or_cls, file=file)
+
+
+def print_usage(
+    instance_or_cls: InstanceOrClass[DataClass],
+    file=None,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+):
+    """See `DataclassParser.print_usage()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.print_usage(instance_or_cls, file=file)
 
 
 def parse_args(
@@ -170,6 +276,45 @@ def parse_args(
     """See `DataclassParser.parse_args()`"""
     parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
     return parser_maker.parse_args(instance_or_cls, args=args)
+
+
+def parse_intermixed_args(
+    instance_or_cls: InstanceOrClass[DataClass],
+    args: Optional[Sequence[str]] = None,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> DataClass:
+    """See `DataclassParser.parse_intermixed_args()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.parse_intermixed_args(instance_or_cls, args=args)
+
+
+def parse_known_args(
+    instance_or_cls: InstanceOrClass[DataClass],
+    args: Optional[Sequence[str]] = None,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> Tuple[DataClass, List[str]]:
+    """See `DataclassParser.parse_known_args()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.parse_known_args(instance_or_cls, args=args)
+
+
+def parse_known_intermixed_args(
+    instance_or_cls: InstanceOrClass[DataClass],
+    args: Optional[Sequence[str]] = None,
+    *,
+    default_argument_args: Optional[Dict[str, Any]] = None,
+    load_defaults_from_file: bool = False,
+    **parser_args,
+) -> Tuple[DataClass, List[str]]:
+    """See `DataclassParser.parse_known_intermixed_args()`"""
+    parser_maker = DataclassParserMaker(instance_or_cls, default_argument_args, load_defaults_from_file, **parser_args)
+    return parser_maker.parse_known_intermixed_args(instance_or_cls, args=args)
 
 
 @overload
