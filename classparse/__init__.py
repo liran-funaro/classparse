@@ -32,38 +32,114 @@ POSSIBILITY OF SUCH DAMAGE.
 import argparse
 import dataclasses
 import functools
+import sys
 from typing import Callable, Optional, Sequence, Type, TypeVar, Union, overload
 
-from classparse.analyze import NO_ARG, POS_ARG
+from classparse.analyze import NO_ARG, POS_ARG, NAME_OR_FLAG
 from classparse.proto import DataclassParser, DataclassParserType
 from classparse.transform import DataclassParserMaker, _transform_dataclass_parser
 
 __version__ = "0.1.4"
 
 
-def arg(*name_or_flag, default=None, **metadata):
+def _field(**kwargs):
+    if "kw_only" in kwargs and sys.version_info.major <= 3 and sys.version_info.minor <= 10:
+        del kwargs["kw_only"]
+    return dataclasses.field(**kwargs)
+
+
+# noinspection PyShadowingBuiltins
+def arg(
+    *name_or_flag,
+    default=dataclasses.MISSING,
+    default_factory=dataclasses.MISSING,
+    init=True,
+    repr=True,  # pylint: disable=redefined-builtin
+    hash=None,  # pylint: disable=redefined-builtin
+    compare=True,
+    kw_only=dataclasses.MISSING,
+    **metadata,
+):
     """
     Allow adding parameters to a named argument.
     See `argparse.add_argument()`.
     """
     if len(name_or_flag) > 0:
-        metadata.update(name_or_flag=name_or_flag)
-    return dataclasses.field(default=default, metadata=metadata)
+        metadata.update({NAME_OR_FLAG: name_or_flag})
+
+    # Non positional fields must have a default value
+    if default is dataclasses.MISSING and default_factory is dataclasses.MISSING:
+        default = None
+
+    return _field(
+        default=default,
+        default_factory=default_factory,
+        init=init,
+        repr=repr,
+        hash=hash,
+        compare=compare,
+        kw_only=kw_only,
+        metadata=metadata,
+    )
 
 
-def pos_arg(default=dataclasses.MISSING, **metadata):
+# noinspection PyShadowingBuiltins
+def pos_arg(
+    default=dataclasses.MISSING,
+    *,
+    default_factory=dataclasses.MISSING,
+    init=True,
+    repr=True,  # pylint: disable=redefined-builtin
+    hash=None,  # pylint: disable=redefined-builtin
+    compare=True,
+    kw_only=dataclasses.MISSING,
+    **metadata,
+):
     """
     Allow adding parameters to a positional argument.
     See `argparse.add_argument()`.
     """
-    return dataclasses.field(default=default, metadata={POS_ARG: True, **metadata})
+    metadata.update({POS_ARG: True})
+    return _field(
+        default=default,
+        default_factory=default_factory,
+        init=init,
+        repr=repr,
+        hash=hash,
+        compare=compare,
+        kw_only=kw_only,
+        metadata=metadata,
+    )
 
 
-def no_arg(default=None, **kwargs):
+# noinspection PyShadowingBuiltins
+def no_arg(
+    default=dataclasses.MISSING,
+    *,
+    default_factory=dataclasses.MISSING,
+    init=True,
+    repr=True,  # pylint: disable=redefined-builtin
+    hash=None,  # pylint: disable=redefined-builtin
+    compare=True,
+    kw_only=dataclasses.MISSING,
+    metadata=None,
+):
     """Set dataclass field as non argparse argument"""
-    metadata = kwargs.setdefault("metadata", {})
-    metadata[NO_ARG] = True
-    return dataclasses.field(default=default, **kwargs)
+    no_arg_meta = {NO_ARG: True}
+    if metadata is None:
+        metadata = no_arg_meta
+    else:
+        metadata.update(no_arg_meta)
+    return _field(
+        default=default,
+        default_factory=default_factory,
+        init=init,
+        repr=repr,
+        hash=hash,
+        compare=compare,
+        kw_only=kw_only,
+        metadata=metadata,
+    )
 
 
 _T = TypeVar("_T", bound=object)

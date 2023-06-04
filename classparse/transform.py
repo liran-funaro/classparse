@@ -142,15 +142,12 @@ class DataclassParserMaker(Generic[_T]):
         self.load_defaults_from_file = bool(load_defaults_from_file)
         self.parser_args = dict(parser_args, description=self.analyzer.description)
         self.flat_fields = list(self.analyzer.iter_flatten_fields())
-        self.main_parser = self.make()
+        self.main_parser = self.get_parser()
 
-    def make(self, instance_or_cls=None) -> argparse.ArgumentParser:
-        """Creates a new ArgumentParser according to the dataclass fields."""
-        parser = argparse.ArgumentParser(**self.parser_args)
-        if self.load_defaults_from_file:
-            _add_load_defaults_arg(parser)
-        self.analyzer.add_all_arguments(instance_or_cls, parser)
-        return parser
+    def _get_parser(self, instance_or_cls=None) -> argparse.ArgumentParser:
+        if self.analyzer.is_cls(instance_or_cls):
+            return self.main_parser
+        return self.get_parser(instance_or_cls)
 
     def _parse_load_defaults(self, instance_or_cls, args=None):
         """If enabled, silently try to parse load-defaults from the arguments, then loads the defaults YAML file."""
@@ -163,26 +160,17 @@ class DataclassParserMaker(Generic[_T]):
 
         return self.load_yaml(instance_or_cls, load_defaults)
 
-    def _get_parser(self, instance_or_cls=None) -> argparse.ArgumentParser:
-        if self.analyzer.is_cls(instance_or_cls):
-            return self.main_parser
-        return self.make(instance_or_cls)
-
-    def _call_parser_method(
-        self, instance_or_cls, args: Optional[Sequence[str]], method_name: str
-    ) -> Tuple[DataclassParser[_T], Any]:
+    def _call_parser_method(self, instance_or_cls, args: Optional[Sequence[str]], parse_method_name: str):
         """See `DataclassParser.parse_args()`"""
         instance_or_cls = self._parse_load_defaults(instance_or_cls, args)
         namespace = DataclassNamespace(self.flat_fields)
         parser = self._get_parser(instance_or_cls)
-        method = getattr(parser, method_name)
-        ret = method(args=args, namespace=namespace)
-        return self.analyzer.transform(instance_or_cls, namespace), ret
-
-    def _call_parser_method_unknown(
-        self, instance_or_cls, args: Optional[Sequence[str]], method_name: str
-    ) -> Tuple[DataclassParser[_T], List[str]]:
-        instance, (_, unknown_args) = self._call_parser_method(instance_or_cls, args, method_name)
+        parse_method = getattr(parser, parse_method_name)
+        ret = parse_method(args=args, namespace=namespace)
+        instance = self.analyzer.transform(instance_or_cls, namespace)
+        if not isinstance(ret, tuple):
+            return instance
+        _, unknown_args = ret
         return instance, unknown_args
 
     ################################################################################################################
@@ -215,7 +203,11 @@ class DataclassParserMaker(Generic[_T]):
 
     def get_parser(self, instance_or_cls=None) -> argparse.ArgumentParser:
         """See `DataclassParser.get_parser()`"""
-        return self.make(instance_or_cls)
+        parser = argparse.ArgumentParser(**self.parser_args)
+        if self.load_defaults_from_file:
+            _add_load_defaults_arg(parser)
+        self.analyzer.add_all_arguments(instance_or_cls, parser)
+        return parser
 
     def format_help(self, instance_or_cls=None) -> str:
         """See `DataclassParser.format_help()`"""
@@ -235,23 +227,23 @@ class DataclassParserMaker(Generic[_T]):
 
     def parse_args(self, instance_or_cls=None, args: Optional[Sequence[str]] = None) -> DataclassParser[_T]:
         """See `DataclassParser.parse_args()`"""
-        return self._call_parser_method(instance_or_cls, args, "parse_args")[0]
+        return self._call_parser_method(instance_or_cls, args, "parse_args")
 
     def parse_intermixed_args(self, instance_or_cls=None, args: Optional[Sequence[str]] = None) -> DataclassParser[_T]:
         """See `DataclassParser.parse_intermixed_args()`"""
-        return self._call_parser_method(instance_or_cls, args, "parse_intermixed_args")[0]
+        return self._call_parser_method(instance_or_cls, args, "parse_intermixed_args")
 
     def parse_known_args(
         self, instance_or_cls, args: Optional[Sequence[str]] = None
     ) -> Tuple[DataclassParser[_T], List[str]]:
         """See `DataclassParser.parse_known_args()`"""
-        return self._call_parser_method_unknown(instance_or_cls, args, "parse_known_args")
+        return self._call_parser_method(instance_or_cls, args, "parse_known_args")
 
     def parse_known_intermixed_args(
         self, instance_or_cls, args: Optional[Sequence[str]] = None
     ) -> Tuple[DataclassParser[_T], List[str]]:
         """See `DataclassParser.parse_known_intermixed_args()`"""
-        return self._call_parser_method_unknown(instance_or_cls, args, "parse_known_intermixed_args")
+        return self._call_parser_method(instance_or_cls, args, "parse_known_intermixed_args")
 
 
 class ClassOrInstanceMethod:

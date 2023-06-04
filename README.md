@@ -177,11 +177,13 @@ class AllOptions:
     complex_arg: complex = complex(1, -1)
     group_arg: Child = None
     default_child_arg: Child = Child(str_arg="override")  # We can override the nested class default values
+    default_factory: List[int] = arg(default_factory=lambda: [1, 2, 3])  # Default factory=%(default)s
 
     # no_arg() is used to not include this argument in the parser.
     # The first argument (optional) sets the default value.
     # The following keyword arguments is forwarded to the dataclasses.field() method.
-    no_arg: int = no_arg(0)
+    non_parsed_arg: int = no_arg(0)
+    non_parsed_with_meta: str = no_arg("", metadata={"key": "third-party-data"})
 
     # We used this argument for the README example.
     # Note that comments above the arg are also included in the help of the argument.
@@ -228,6 +230,7 @@ usage: my_program.py [-h] [--int-arg INT_ARG]
                      [--group-arg.child-arg.str-arg GROUP_ARG.CHILD_ARG.STR_ARG]
                      [--default-child-arg.str-arg DEFAULT_CHILD_ARG.STR_ARG]
                      [--default-child-arg.child-arg.str-arg DEFAULT_CHILD_ARG.CHILD_ARG.STR_ARG]
+                     [--default-factory DEFAULT_FACTORY [DEFAULT_FACTORY ...]]
                      [--show SHOW [SHOW ...]]
                      pos-arg-1 [pos-arg-2]
 
@@ -312,6 +315,8 @@ options:
                         (type: bool) (default: False)
   --complex-arg COMPLEX_ARG
                         (type: complex)
+  --default-factory DEFAULT_FACTORY [DEFAULT_FACTORY ...]
+                        Default factory=[1, 2, 3]
   --show SHOW [SHOW ...], -s SHOW [SHOW ...]
                         We used this argument for the README example. Note
                         that comments above the arg are also included in the

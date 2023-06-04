@@ -36,6 +36,7 @@ from classparse.types import update_field_type
 
 NO_ARG = "__no_arg__"
 POS_ARG = "__pos_arg__"
+NAME_OR_FLAG = "__name_or_flag__"
 
 
 def to_arg_name(name: str) -> str:
@@ -162,9 +163,9 @@ class DataclassFieldAnalyzer(Generic[_T]):
         desc: FieldDescriptor[_T] = FieldDescriptor(field.name, dict(self.default_argument_args))
         metadata_kwargs = dict(field.metadata)
         desc.is_arg = not metadata_kwargs.pop(NO_ARG, False)
-        name_or_flag = metadata_kwargs.pop("name_or_flag", None)
         is_explicit_positional = metadata_kwargs.pop(POS_ARG, False)
-        has_default = field.default is not dataclasses.MISSING
+        name_or_flag = metadata_kwargs.pop(NAME_OR_FLAG, None)
+        has_default = field.default is not dataclasses.MISSING or field.default_factory is not dataclasses.MISSING
         is_positional = is_explicit_positional or not has_default
 
         # Type precedence: field.metadata, field.type
@@ -175,8 +176,10 @@ class DataclassFieldAnalyzer(Generic[_T]):
             metadata_kwargs.setdefault("help", field_doc)
 
         # Default precedence: override_default, field.default, field.metadata
-        if has_default:
+        if field.default is not dataclasses.MISSING:
             metadata_kwargs["default"] = field.default
+        if field.default_factory is not dataclasses.MISSING:
+            metadata_kwargs["default"] = field.default_factory()
 
         # Arguments precedence: field.metadata/overrides, default_argument_args
         desc.kwargs.update(metadata_kwargs)
