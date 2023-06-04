@@ -184,6 +184,14 @@ def _make_metavar_string(choices: List) -> str:
     return f"{{{metavar}}}"
 
 
+def _with_predicate(pred_func: Callable[[Any], bool]):
+    def decorator(func):
+        func.predicate = pred_func
+        return func
+
+    return decorator
+
+
 class _Argument:
     def __init__(self, argument_args: Dict[str, Any]):
         self.args = argument_args
@@ -205,10 +213,12 @@ class _Argument:
         """Returns the type args of the argument"""
         return typing.get_args(self.type)
 
+    @_with_predicate(_is_any_type)
     def update_any(self):
         """Any/Optional annotation without a type"""
         self.args.pop("type", None)
 
+    @_with_predicate(_is_union_type)
     def update_union(self):
         """Optional annotation with a type (interpreted as a Union), Union"""
         arg_set = [t for t in self.type_args if not _is_non_specific_type(t)]
@@ -221,7 +231,8 @@ class _Argument:
         else:
             self.update_any()
 
-    def update_nargs(self):
+    @_with_predicate(_is_container_type)
+    def update_container(self):
         """
         List/Tuple/Set type/annotation is used to define a repeated argument.
         Tuple annotation is used to define a fixed length repeated argument
@@ -244,6 +255,7 @@ class _Argument:
         else:
             self.update_any()
 
+    @_with_predicate(_is_enum_type)
     def update_enum(self):
         """Enum type is used to define a typed choice argument"""
         enum_type = self.type
@@ -258,6 +270,7 @@ class _Argument:
             self.args["default"] = cur_default.name
         self.args["type"] = _make_enum_parser(enum_type)
 
+    @_with_predicate(_is_literal_type)
     def update_literal(self):
         """Literal type is used to define an untyped choice argument"""
         choices = list(self.type_args)
@@ -273,6 +286,7 @@ class _Argument:
             self.args["type"] = list(choices_types)[0]
             self.have_nested_type = True
 
+    @_with_predicate(_is_bool_type)
     def update_bool(self):
         """bool type is used to define a BooleanOptionalAction argument"""
         if hasattr(argparse, "BooleanOptionalAction"):
@@ -289,18 +303,12 @@ class _Argument:
         """Updates the field type"""
         self.have_nested_type = False
 
-        if _is_any_type(self.type):
-            self.update_any()
-        elif _is_union_type(self.type):
-            self.update_union()
-        elif _is_container_type(self.type):
-            self.update_nargs()
-        elif _is_enum_type(self.type):
-            self.update_enum()
-        elif _is_literal_type(self.type):
-            self.update_literal()
-        elif _is_bool_type(self.type):
-            self.update_bool()
+        methods = (getattr(self, name) for name in dir(self))
+        cur_type = self.type
+        for func in (m for m in methods if hasattr(m, "predicate")):
+            if func.predicate(cur_type):
+                func()
+                break
 
         self.update_count += 1
 
