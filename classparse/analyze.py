@@ -175,39 +175,36 @@ class DataclassFieldAnalyzer(Generic[_T]):
         if field_doc is not None:
             metadata_kwargs.setdefault("help", field_doc)
 
-        # Default precedence: override_default, field.default, field.metadata
+        # Default precedence: override default (later), field.default(_factory), field.metadata
         if field.default is not dataclasses.MISSING:
             metadata_kwargs["default"] = field.default
         if field.default_factory is not dataclasses.MISSING:
             metadata_kwargs["default"] = field.default_factory()
 
-        # Arguments precedence: field.metadata/overrides, default_argument_args
-        desc.kwargs.update(metadata_kwargs)
-
         # Store default before updating type, because it may change an Enum default to string for readability
-        desc.default = desc.kwargs.get("default", None)
-        desc.type = desc.kwargs.get("type", None)
+        desc.default = metadata_kwargs.get("default", None)
+        desc.type = metadata_kwargs.get("type", None)
 
-        # Regular type
         if not dataclasses.is_dataclass(desc.type):
-            # Fix field type to work well with argparse
-            desc.type = update_field_type(desc.kwargs)
+            # Regular type
+            desc.type = update_field_type(metadata_kwargs)
             desc.args = _name_or_flags_arg(desc.name, name_or_flag, is_positional, self.arg_prefix)
-            return desc
+        else:
+            # Nested dataclass
+            assert not is_explicit_positional, f"Nested dataclass field '{desc.name}' cannot be positional."
+            assert name_or_flag is None, f"Nested dataclass field '{desc.name}' cannot have additional names or flags."
+            desc.sub_analyzer = DataclassFieldAnalyzer(
+                desc.type,
+                default_argument_args=self.default_argument_args,
+                description=metadata_kwargs.get("help", None),
+                arg_prefix=[*self.arg_prefix, field.name],
+            )
+            desc.type = desc.sub_analyzer.all_types
+            if desc.default is not None:
+                desc.default = desc.sub_analyzer.get_vars(desc.default)
 
-        # Nested dataclass
-        assert not is_explicit_positional, f"Nested dataclass field '{desc.name}' cannot be positional."
-        assert name_or_flag is None, f"Nested dataclass field '{desc.name}' cannot have additional names or flags."
-        desc.sub_analyzer = DataclassFieldAnalyzer(
-            desc.type,
-            default_argument_args=self.default_argument_args,
-            description=metadata_kwargs.get("help", None),
-            arg_prefix=[*self.arg_prefix, field.name],
-        )
-        desc.type = desc.sub_analyzer.all_types
-        if desc.default is not None:
-            desc.default = desc.sub_analyzer.get_vars(desc.default)
-
+        # Keyword arguments precedence: type updates, field.metadata or overrides, default_argument_args
+        desc.kwargs.update(metadata_kwargs)
         return desc
 
     def is_cls(self, instance_or_cls: Optional[InstanceOrClass[_T]] = None):

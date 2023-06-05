@@ -38,6 +38,7 @@ _TYPE_RECURSION_LIMIT = 1024
 _TRUE_STRINGS = {"t", "true", "y", "yes"}
 _FALSE_STRINGS = {"f", "false", "n", "no"}
 _CONTAINER_TYPES = list, tuple, set
+_ANY_TYPES = Any, Optional, object, ..., "typing.Any", "Any", "", None, type(None)
 
 
 @functools.wraps(bool)
@@ -108,11 +109,7 @@ def _is_type(type_obj, parent_type_obj) -> bool:
 
 
 def _is_any_type(type_obj) -> bool:
-    return type_obj in [Any, Optional, object, ..., "typing.Any", "Any", "", None, type(None)]
-
-
-def _is_non_specific_type(type_obj) -> bool:
-    return _is_any_type(type_obj) or _is_type(type_obj, type(None))
+    return type_obj in _ANY_TYPES or _is_type(type_obj, type(None))
 
 
 def _is_container_type(type_obj) -> bool:
@@ -194,14 +191,14 @@ def _with_predicate(pred_func: Callable[[Any], bool]):
 
 class _Argument:
     def __init__(self, argument_args: Dict[str, Any]):
-        self.args = argument_args
+        self.kwargs = argument_args
         self.update_count = 0
-        self.have_nested_type = True
+        self.requires_further_inspection = True
 
     @property
     def type(self) -> Optional[Type]:
         """Returns the type of the argument"""
-        return self.args.get("type", None)
+        return self.kwargs.get("type", None)
 
     @property
     def type_origin(self) -> Optional[Type]:
@@ -213,23 +210,38 @@ class _Argument:
         """Returns the type args of the argument"""
         return typing.get_args(self.type)
 
+    def set_type(self, new_type, requires_further_inspection=False):
+        """Update argument type"""
+        if new_type is None:
+            self.kwargs.pop("type", None)
+        else:
+            self.kwargs["type"] = new_type
+        self.requires_further_inspection = self.requires_further_inspection or requires_further_inspection
+
+    def force_update(self, **kwargs):
+        """Updates arguments, overwriting existing ones"""
+        self.kwargs.update(kwargs)
+
+    def update_if_not_exists(self, **kwargs):
+        """Updates arguments if they were not set explicitly by the user"""
+        self.kwargs.update({k: v for k, v in kwargs.items() if k not in self.kwargs})
+
     @_with_predicate(_is_any_type)
     def update_any(self):
         """Any/Optional annotation without a type"""
-        self.args.pop("type", None)
+        self.set_type(None)
 
     @_with_predicate(_is_union_type)
     def update_union(self):
         """Optional annotation with a type (interpreted as a Union), Union"""
-        arg_set = [t for t in self.type_args if not _is_non_specific_type(t)]
+        arg_set = [t for t in self.type_args if not _is_any_type(t)]
         if len(arg_set) > 1:
-            self.args["type"] = _wrap_union(self.type, arg_set)
+            self.set_type(_wrap_union(self.type, arg_set))
         elif len(arg_set) == 1:
             # For union of one specific type, we support further inspection of the type
-            self.args["type"] = arg_set[0]
-            self.have_nested_type = True
+            self.set_type(arg_set[0], True)
         else:
-            self.update_any()
+            self.set_type(None)
 
     @_with_predicate(_is_container_type)
     def update_container(self):
@@ -247,13 +259,12 @@ class _Argument:
                 # Tuple[T1, T2, Tn] ==> nargs=n
                 n_args = len(type_args)
 
-        self.args.setdefault("nargs", n_args)
+        self.update_if_not_exists(nargs=n_args)
 
         if len(type_args) > 0:
-            self.args["type"] = Union[type_args]
-            self.have_nested_type = True
+            self.set_type(Union[type_args], True)
         else:
-            self.update_any()
+            self.set_type(None)
 
     @_with_predicate(_is_enum_type)
     def update_enum(self):
@@ -262,13 +273,12 @@ class _Argument:
         assert enum_type is not None
         assert issubclass(enum_type, enum.Enum)
         choices = list(enum_type)
-        self.args["choices"] = choices
-        self.args["metavar"] = _make_metavar_string(choices)
-        cur_default = self.args.get("default", None)
+        self.update_if_not_exists(choices=choices, metavar=_make_metavar_string(choices))
+        cur_default = self.kwargs.get("default", None)
         if isinstance(cur_default, enum.Enum):
             # Change default to string for readability
-            self.args["default"] = cur_default.name
-        self.args["type"] = _make_enum_parser(enum_type)
+            self.force_update(default=cur_default.name)
+        self.set_type(_make_enum_parser(enum_type))
 
     @_with_predicate(_is_literal_type)
     def update_literal(self):
@@ -276,41 +286,41 @@ class _Argument:
         choices = list(self.type_args)
         assert len(choices) > 0, "'Literal' must have at least one parameter."
         choices_types = set(map(type, choices))
-
-        self.args["choices"] = choices
-        self.args["metavar"] = _make_metavar_string(choices)
+        self.update_if_not_exists(choices=choices, metavar=_make_metavar_string(choices))
 
         if len(choices_types) > 1:
-            self.args["type"] = _make_literal_parser(self.type, raise_error=False)
+            self.set_type(_make_literal_parser(self.type, raise_error=False))
         else:
-            self.args["type"] = list(choices_types)[0]
-            self.have_nested_type = True
+            self.set_type(list(choices_types)[0], True)
 
     @_with_predicate(_is_bool_type)
     def update_bool(self):
         """bool type is used to define a BooleanOptionalAction argument"""
         if hasattr(argparse, "BooleanOptionalAction"):
-            self.args["action"] = argparse.BooleanOptionalAction
+            self.update_if_not_exists(action=argparse.BooleanOptionalAction)
         else:
-            self.args["action"] = "store_true"
-            del self.args["type"]
+            self.update_if_not_exists(action="store_true")
+            self.set_type(None)
 
     def require_update(self) -> bool:
         """Return `True` if the type was (re)assigned, and it requires to inspect it again"""
-        return self.have_nested_type and self.update_count < _TYPE_RECURSION_LIMIT
+        return self.requires_further_inspection and self.update_count < _TYPE_RECURSION_LIMIT
+
+    def predicate_methods(self):
+        """Iterate over all methods that have type predicate"""
+        methods = (getattr(self, name) for name in dir(self))
+        yield from (m for m in methods if hasattr(m, "predicate"))
 
     def update_field_type(self):
         """Updates the field type"""
-        self.have_nested_type = False
-
-        methods = (getattr(self, name) for name in dir(self))
+        self.update_count += 1
+        self.requires_further_inspection = False
         cur_type = self.type
-        for func in (m for m in methods if hasattr(m, "predicate")):
+
+        for func in self.predicate_methods():
             if func.predicate(cur_type):
                 func()
                 break
-
-        self.update_count += 1
 
 
 def update_field_type(argument_args: Dict[str, Any]):
