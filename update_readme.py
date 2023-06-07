@@ -51,7 +51,6 @@ embed_pattern = re.compile(
 )
 init_doc_pattern = re.compile(r'^"""[\s\S]*?"""\n', re.MULTILINE)
 multi_break_pattern = re.compile(r"\n{2,}", re.MULTILINE)
-
 execute_pattern = re.compile(
     (
         r"<!--\s*execute\s*:\s*(?P<cmd>.*?)\s*-->\n"
@@ -62,6 +61,7 @@ execute_pattern = re.compile(
     ),
     re.MULTILINE,
 )
+python_pattern = re.compile(r"(^|\s)python(\s)", re.MULTILINE)
 
 
 @classparser
@@ -70,6 +70,12 @@ class UpdateArgs:
     verify: bool = arg("-v", default=False)  # Verifies the output matches
     input: str = arg("-i", default="README.md")
     output: str = arg("-o", default="stdout")
+    python_bin: str = arg("-p")
+
+    def replace_python(self, cmd: str) -> str:
+        if self.python_bin is not None:
+            return python_pattern.sub(rf"\1{self.python_bin}\2", cmd)
+        return cmd
 
 
 def read_file(file_path: str) -> str:
@@ -107,11 +113,11 @@ def make_readme():
 
     i = 0
     readme_output = []
+    env = dict(os.environ, PYTHONPATH=".")
     for m in execute_pattern.finditer(readme_content):
         cmd = m.group("cmd").strip()
-        env = dict(os.environ, PYTHONPATH=".")
         r = subprocess.run(
-            cmd,
+            args.replace_python(cmd),
             shell=True,
             text=True,
             stdout=subprocess.PIPE,
@@ -140,9 +146,9 @@ def make_readme():
             fromfile="source",
             tofile="generated",
         )
-        diff = "".join(diff).strip()
-        if diff:
-            print(diff, file=sys.stderr)
+        diff_str = "".join(diff).strip()
+        if diff_str:
+            print(diff_str, file=sys.stderr)
             exit(1)
     elif args.output == "stdout":
         print(readme_content)
