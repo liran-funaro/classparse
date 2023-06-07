@@ -145,7 +145,6 @@ class DataclassParserProto(Protocol[_T_co]):  # pragma: no cover
 
 DataclassParser = Union[_T_co, DataclassParserProto[_T_co]]
 DataclassParserType = Union[Type[_T_co], Type[DataclassParserProto[_T_co]]]
-DataclassParserInstanceOrClass = Union[DataclassParserType, DataclassParser]
 
 dataclass_parser_methods: Tuple[str, ...] = tuple(
     method_name for method_name, method in vars(DataclassParserProto).items() if isinstance(method, classmethod)
