@@ -45,7 +45,7 @@ class DataclassParserProto(Protocol[_T_co]):  # pragma: no cover
         * If a method is called on an instance: the instance values will be used as defaults.
     """
 
-    def __new__(cls) -> "DataclassParser[_T_co]":  # type: ignore
+    def __new__(cls) -> "DataclassParserProto[_T_co]":  # type: ignore
         ...
 
     @classmethod
@@ -143,8 +143,9 @@ class DataclassParserProto(Protocol[_T_co]):  # pragma: no cover
         """
 
 
-DataclassParser = Union[_T_co, DataclassParserProto[_T_co]]
-DataclassParserType = Union[Type[_T_co], Type[DataclassParserProto[_T_co]]]
+_T = TypeVar("_T", bound=object)
+DataclassParser = Union[DataclassParserProto[_T], _T]
+DataclassParserType = Union[Type[DataclassParserProto[_T]], Type[_T]]
 
 dataclass_parser_methods: Tuple[str, ...] = tuple(
     method_name for method_name, method in vars(DataclassParserProto).items() if isinstance(method, classmethod)
