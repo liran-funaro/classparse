@@ -41,6 +41,7 @@ jobs:
         run: |
           pytest --cov=classparse
       - name: Coveralls
+        if: ${{ !env.ACT }} # skip during local actions testing
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COVERALLS_FLAG_NAME: ${{ matrix.test-name }}
@@ -49,6 +50,7 @@ jobs:
           coveralls --service=github
 
   coveralls:
+    if: ${{ !github.event.act }} # skip during local actions testing
     name: Indicate completion to coveralls.io
     needs: test
     runs-on: ubuntu-latest
